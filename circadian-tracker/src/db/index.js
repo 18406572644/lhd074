@@ -3,6 +3,7 @@ import { encrypt, decrypt } from './crypto'
 const DB_PREFIX = 'ct_'
 const RECORDS_KEY = DB_PREFIX + 'records'
 const GOALS_KEY = DB_PREFIX + 'goals'
+const TAGS_KEY = DB_PREFIX + 'tags'
 
 async function safeGet(key) {
   const raw = localStorage.getItem(key)
@@ -52,5 +53,14 @@ export const db = {
 
   async saveGoals(goals) {
     await safeSet(GOALS_KEY, goals)
+  },
+
+  async getTags() {
+    const tags = await safeGet(TAGS_KEY)
+    return Array.isArray(tags) ? tags : null
+  },
+
+  async saveTags(tags) {
+    await safeSet(TAGS_KEY, tags)
   }
 }

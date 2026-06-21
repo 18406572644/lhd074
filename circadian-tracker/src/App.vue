@@ -6,6 +6,74 @@
         <span class="app-title">作息节律追踪</span>
       </div>
       <div class="title-bar-actions">
+        <div class="global-search" ref="searchWrapRef">
+          <el-input
+            v-model="searchKeyword"
+            placeholder="搜索标签或备注..."
+            size="small"
+            clearable
+            :prefix-icon="Search"
+            style="width: 220px"
+            @input="handleSearchInput"
+            @focus="showSearchResults = true"
+          />
+          <transition name="fade">
+            <div v-if="showSearchResults && searchKeyword.trim()" class="search-results-panel">
+              <div class="search-results-header">
+                <span>搜索结果</span>
+                <span class="result-count">{{ searchResults.length }} 条</span>
+              </div>
+              <div v-if="searchResults.length === 0" class="search-empty">
+                <el-empty description="未找到匹配记录" :image-size="60" />
+              </div>
+              <div v-else class="search-results-list">
+                <div
+                  v-for="result in searchResults"
+                  :key="result.date"
+                  class="search-result-item"
+                  @click="jumpToResult(result)"
+                >
+                  <div class="result-left">
+                    <div class="result-date">{{ result.date }}</div>
+                    <div class="result-time">
+                      {{ result.bedtime }} - {{ result.wakeTime }}
+                    </div>
+                  </div>
+                  <div class="result-center">
+                    <div v-if="result.tags && result.tags.length" class="result-tags">
+                      <el-tag
+                        v-for="t in result.tags"
+                        :key="t"
+                        size="small"
+                        type="primary"
+                        effect="light"
+                        round
+                      >{{ t }}</el-tag>
+                    </div>
+                    <div v-if="result.note" class="result-note">{{ result.note }}</div>
+                  </div>
+                  <div class="result-right">
+                    <el-tag
+                      :type="getScoreTagType(result.score)"
+                      size="small"
+                      effect="dark"
+                      round
+                    >{{ result.score }}分</el-tag>
+                    <div class="matched-fields">
+                      <el-tag
+                        v-for="f in result.matchedFields"
+                        :key="f"
+                        size="small"
+                        type="info"
+                        effect="plain"
+                      >{{ f }}</el-tag>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </transition>
+        </div>
         <el-switch
           v-model="themeStore.isDark"
           @change="themeStore.toggleTheme()"
@@ -65,9 +133,10 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, computed, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { Search } from '@element-plus/icons-vue'
 import html2canvas from 'html2canvas'
 import { jsPDF } from 'jspdf'
 import { useScheduleStore, useThemeStore, useSettingsStore } from '@/store'
@@ -83,12 +152,42 @@ const reportData = ref(null)
 const pdfRef = ref(null)
 const showSettings = ref(false)
 
+const searchKeyword = ref('')
+const showSearchResults = ref(false)
+const searchWrapRef = ref(null)
+
 const navItems = [
   { path: '/', label: '数据仪表盘', icon: 'DataBoard' },
   { path: '/input', label: '作息录入', icon: 'EditPen' },
   { path: '/calendar', label: '日历视图', icon: 'Calendar' },
   { path: '/sleep', label: '睡眠详情', icon: 'Moon' }
 ]
+
+const searchResults = computed(() => {
+  return scheduleStore.searchRecords(searchKeyword.value)
+})
+
+function getScoreTagType(score) {
+  if (score >= 80) return 'success'
+  if (score >= 60) return 'warning'
+  return 'danger'
+}
+
+function handleSearchInput() {
+  showSearchResults.value = true
+}
+
+function jumpToResult(result) {
+  router.push({ path: '/calendar', query: { date: result.date } })
+  showSearchResults.value = false
+  searchKeyword.value = ''
+}
+
+function handleDocumentClick(e) {
+  if (searchWrapRef.value && !searchWrapRef.value.contains(e.target)) {
+    showSearchResults.value = false
+  }
+}
 
 function minimize() { window.electronAPI?.minimizeWindow() }
 function maximize() { window.electronAPI?.maximizeWindow() }
@@ -109,6 +208,11 @@ onMounted(async () => {
   }
 
   window.addEventListener('export-pdf', handleExportPdf)
+  document.addEventListener('click', handleDocumentClick)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('click', handleDocumentClick)
 })
 
 async function handleExportPdf() {
@@ -198,8 +302,130 @@ async function handleExportPdf() {
   .title-bar-actions {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 8px;
     -webkit-app-region: no-drag;
+
+    .global-search {
+      position: relative;
+      margin-right: 8px;
+
+      .search-results-panel {
+        position: absolute;
+        top: calc(100% + 6px);
+        right: 0;
+        width: 480px;
+        max-height: 420px;
+        background: var(--ct-surface);
+        border: 1px solid var(--ct-border);
+        border-radius: 10px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+        z-index: 1000;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+
+        .search-results-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 10px 14px;
+          border-bottom: 1px solid var(--ct-border);
+          font-size: 12px;
+          font-weight: 600;
+          color: var(--ct-text);
+          background: rgba(126, 184, 216, 0.06);
+
+          .result-count {
+            color: var(--ct-text-secondary);
+            font-weight: 500;
+          }
+        }
+
+        .search-empty {
+          padding: 20px;
+        }
+
+        .search-results-list {
+          overflow-y: auto;
+          flex: 1;
+        }
+
+        .search-result-item {
+          display: grid;
+          grid-template-columns: 100px 1fr auto;
+          gap: 12px;
+          padding: 10px 14px;
+          cursor: pointer;
+          transition: background 0.15s;
+          border-bottom: 1px solid var(--ct-border);
+
+          &:last-child {
+            border-bottom: none;
+          }
+
+          &:hover {
+            background: rgba(126, 184, 216, 0.08);
+          }
+
+          .result-left {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            gap: 2px;
+
+            .result-date {
+              font-size: 13px;
+              font-weight: 700;
+              color: var(--ct-text);
+            }
+
+            .result-time {
+              font-size: 10px;
+              color: var(--ct-text-secondary);
+            }
+          }
+
+          .result-center {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            min-width: 0;
+
+            .result-tags {
+              display: flex;
+              flex-wrap: wrap;
+              gap: 4px;
+            }
+
+            .result-note {
+              font-size: 11px;
+              color: var(--ct-text-secondary);
+              overflow: hidden;
+              text-overflow: ellipsis;
+              display: -webkit-box;
+              -webkit-line-clamp: 2;
+              -webkit-box-orient: vertical;
+              line-height: 1.4;
+            }
+          }
+
+          .result-right {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 6px;
+            justify-content: center;
+
+            .matched-fields {
+              display: flex;
+              flex-wrap: wrap;
+              gap: 3px;
+              justify-content: flex-end;
+            }
+          }
+        }
+      }
+    }
 
     .window-btn {
       width: 32px;

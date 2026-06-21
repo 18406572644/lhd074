@@ -8,10 +8,28 @@
     <div class="calendar-body">
       <div class="ct-card calendar-card">
         <div class="calendar-nav">
-          <el-button :icon="ArrowLeft" circle @click="prevMonth" />
-          <span class="month-label">{{ currentYear }}年{{ currentMonth + 1 }}月</span>
-          <el-button :icon="ArrowRight" circle @click="nextMonth" />
-          <el-button size="small" @click="goToday" style="margin-left: 12px">今天</el-button>
+          <div class="nav-left">
+            <el-button :icon="ArrowLeft" circle @click="prevMonth" />
+            <span class="month-label">{{ currentYear }}年{{ currentMonth + 1 }}月</span>
+            <el-button :icon="ArrowRight" circle @click="nextMonth" />
+            <el-button size="small" @click="goToday" style="margin-left: 12px">今天</el-button>
+          </div>
+          <div class="nav-right">
+            <el-select
+              v-model="filterTag"
+              placeholder="标签筛选"
+              clearable
+              size="small"
+              style="width: 140px"
+            >
+              <el-option
+                v-for="tag in store.tags"
+                :key="tag"
+                :label="tag"
+                :value="tag"
+              />
+            </el-select>
+          </div>
         </div>
         <div class="calendar-grid">
           <div class="week-header">
@@ -26,6 +44,7 @@
                 'other-month': !day.currentMonth,
                 'is-today': day.isToday,
                 'has-record': day.record,
+                'filtered-out': filterTag && day.record && !day.matchFilter,
                 'selected': day.date === selectedDate
               }"
               @click="selectDay(day)"
@@ -37,6 +56,25 @@
               </div>
               <div v-if="day.record" class="day-summary">
                 {{ day.record.bedtime }} - {{ day.record.wakeTime }}
+              </div>
+              <div v-if="day.record && day.record.tags && day.record.tags.length > 0" class="day-tags">
+                <el-tag
+                  v-for="t in day.record.tags.slice(0, 2)"
+                  :key="t"
+                  size="small"
+                  type="primary"
+                  effect="light"
+                  round
+                  class="day-tag"
+                >{{ t }}</el-tag>
+                <el-tag
+                  v-if="day.record.tags.length > 2"
+                  size="small"
+                  type="info"
+                  effect="plain"
+                  round
+                  class="day-tag"
+                >+{{ day.record.tags.length - 2 }}</el-tag>
               </div>
             </div>
           </div>
@@ -86,6 +124,22 @@
             </span>
           </div>
         </div>
+        <div v-if="selectedRecord.tags && selectedRecord.tags.length > 0" class="detail-tags">
+          <div class="detail-tags-label">
+            <el-icon><PriceTag /></el-icon>
+            标签
+          </div>
+          <div class="detail-tags-list">
+            <el-tag
+              v-for="t in selectedRecord.tags"
+              :key="t"
+              type="primary"
+              effect="light"
+              round
+              size="small"
+            >{{ t }}</el-tag>
+          </div>
+        </div>
         <div v-if="selectedRecord.note" class="detail-note">
           <el-icon><ChatLineSquare /></el-icon>
           {{ selectedRecord.note }}
@@ -99,15 +153,18 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { ArrowLeft, ArrowRight } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import { useScheduleStore } from '@/store'
 
+const route = useRoute()
 const store = useScheduleStore()
 const currentYear = ref(dayjs().year())
 const currentMonth = ref(dayjs().month())
 const selectedDate = ref(dayjs().format('YYYY-MM-DD'))
+const filterTag = ref(null)
 const weekDays = ['日', '一', '二', '三', '四', '五', '六']
 
 const calendarDays = computed(() => {
@@ -117,6 +174,13 @@ const calendarDays = computed(() => {
   const prevMonthDays = dayjs(new Date(currentYear.value, currentMonth.value, 0)).daysInMonth()
   const today = dayjs().format('YYYY-MM-DD')
   const days = []
+  const ft = filterTag.value
+
+  function matchFilter(record) {
+    if (!ft) return true
+    if (!record) return false
+    return Array.isArray(record.tags) && record.tags.includes(ft)
+  }
 
   for (let i = startDay - 1; i >= 0; i--) {
     const d = prevMonthDays - i
@@ -125,7 +189,8 @@ const calendarDays = computed(() => {
     days.push({
       day: d, date, currentMonth: false, isToday: date === today,
       record: record || null,
-      score: record ? store.calcSleepScore(record) : 0
+      score: record ? store.calcSleepScore(record) : 0,
+      matchFilter: matchFilter(record)
     })
   }
 
@@ -135,7 +200,8 @@ const calendarDays = computed(() => {
     days.push({
       day: i, date, currentMonth: true, isToday: date === today,
       record: record || null,
-      score: record ? store.calcSleepScore(record) : 0
+      score: record ? store.calcSleepScore(record) : 0,
+      matchFilter: matchFilter(record)
     })
   }
 
@@ -146,7 +212,8 @@ const calendarDays = computed(() => {
     days.push({
       day: i, date, currentMonth: false, isToday: false,
       record: record || null,
-      score: record ? store.calcSleepScore(record) : 0
+      score: record ? store.calcSleepScore(record) : 0,
+      matchFilter: matchFilter(record)
     })
   }
 
@@ -209,6 +276,24 @@ function goToday() {
 function selectDay(day) {
   selectedDate.value = day.date
 }
+
+function handleRouteDate() {
+  const dateQuery = route.query.date
+  if (typeof dateQuery === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateQuery)) {
+    selectedDate.value = dateQuery
+    const d = dayjs(dateQuery)
+    currentYear.value = d.year()
+    currentMonth.value = d.month()
+  }
+}
+
+onMounted(() => {
+  handleRouteDate()
+})
+
+watch(() => route.query.date, () => {
+  handleRouteDate()
+})
 </script>
 
 <style lang="scss" scoped>
@@ -238,8 +323,21 @@ function selectDay(day) {
   .calendar-nav {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 8px;
     margin-bottom: 16px;
+
+    .nav-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .nav-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
 
     .month-label {
       font-size: 16px;
@@ -299,6 +397,11 @@ function selectDay(day) {
       background: rgba(126, 184, 216, 0.15);
     }
 
+    &.filtered-out {
+      opacity: 0.25;
+      filter: grayscale(0.6);
+    }
+
     .day-number {
       font-size: 13px;
       font-weight: 600;
@@ -331,6 +434,18 @@ function selectDay(day) {
       font-size: 9px;
       color: var(--ct-text-secondary);
       margin-top: 2px;
+    }
+
+    .day-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 2px;
+      margin-top: 3px;
+
+      .day-tag {
+        transform: scale(0.8);
+        transform-origin: left top;
+      }
     }
   }
 }
@@ -368,6 +483,30 @@ function selectDay(day) {
     display: flex;
     align-items: flex-start;
     gap: 6px;
+  }
+
+  .detail-tags {
+    margin-top: 12px;
+    padding: 10px;
+    background: rgba(126, 184, 216, 0.05);
+    border-radius: 8px;
+
+    .detail-tags-label {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--ct-text-secondary);
+      margin-bottom: 8px;
+      .el-icon { color: var(--ct-primary); }
+    }
+
+    .detail-tags-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
   }
 }
 

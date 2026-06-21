@@ -39,6 +39,20 @@
         <div class="ct-title">
           <el-icon><Sunrise /></el-icon>
           睡眠时相分析
+          <el-select
+            v-model="filterTag"
+            placeholder="标签筛选"
+            clearable
+            size="small"
+            style="margin-left:auto; width: 140px"
+          >
+            <el-option
+              v-for="tag in store.tags"
+              :key="tag"
+              :label="tag"
+              :value="tag"
+            />
+          </el-select>
         </div>
         <div class="phase-bars">
           <div class="phase-bar" v-for="record in last7" :key="record.date">
@@ -47,6 +61,18 @@
               <div class="phase-deep" :style="{ width: deepPercent(record) + '%' }"></div>
               <div class="phase-light" :style="{ width: lightPercent(record) + '%' }"></div>
               <div class="phase-awake" :style="{ width: awakePercent(record) + '%' }"></div>
+            </div>
+            <div class="phase-tags" v-if="record.tags && record.tags.length > 0">
+              <el-tag
+                v-for="t in record.tags.slice(0, 1)"
+                :key="t"
+                size="small"
+                type="primary"
+                effect="light"
+                round
+                class="phase-tag"
+                :title="record.tags.join(', ')"
+              >{{ t }}{{ record.tags.length > 1 ? '+' + (record.tags.length - 1) : '' }}</el-tag>
             </div>
             <span class="phase-score" :class="getScoreClass(store.calcSleepScore(record))">
               {{ store.calcSleepScore(record) }}
@@ -120,7 +146,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, nextTick, reactive } from 'vue'
+import { ref, computed, onMounted, nextTick, reactive, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import dayjs from 'dayjs'
 import * as echarts from 'echarts'
@@ -132,6 +158,8 @@ const factorChartRef = ref(null)
 let sleepChart = null
 let factorChart = null
 
+const filterTag = ref(null)
+
 const goals = reactive({
   targetBedtime: store.goals.targetBedtime,
   targetWakeTime: store.goals.targetWakeTime,
@@ -141,7 +169,7 @@ const goals = reactive({
   maxScreenMin: store.goals.maxScreenMin
 })
 
-const last7 = computed(() => store.getLast7Days())
+const last7 = computed(() => store.getLast7Days(filterTag.value))
 
 const avgScore = computed(() => {
   const days = last7.value
@@ -204,7 +232,7 @@ function renderSleepChart() {
   if (!sleepChartRef.value) return
   if (!sleepChart) sleepChart = echarts.init(sleepChartRef.value)
 
-  const days = store.getLast7Days()
+  const days = last7.value
   const dates = days.map(r => r.date.slice(5))
   const bedtimes = days.map(r => {
     const [h, m] = r.bedtime.split(':').map(Number)
@@ -248,7 +276,7 @@ function renderFactorChart() {
   if (!factorChartRef.value) return
   if (!factorChart) factorChart = echarts.init(factorChartRef.value)
 
-  const days = store.getLast7Days()
+  const days = last7.value
   const dates = days.map(r => r.date.slice(5))
 
   factorChart.setOption({
@@ -264,6 +292,13 @@ function renderFactorChart() {
     ]
   })
 }
+
+watch([filterTag, () => store.records], () => {
+  nextTick(() => {
+    renderSleepChart()
+    renderFactorChart()
+  })
+}, { deep: true })
 
 onMounted(() => {
   nextTick(() => {
@@ -408,6 +443,17 @@ onMounted(() => {
           .phase-awake {
             background: #d0e9f6;
             transition: width 0.3s;
+          }
+        }
+
+        .phase-tags {
+          width: 58px;
+          flex-shrink: 0;
+          display: flex;
+          justify-content: center;
+
+          .phase-tag {
+            transform: scale(0.82);
           }
         }
 

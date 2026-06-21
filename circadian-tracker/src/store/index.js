@@ -3,6 +3,8 @@ import { ref, computed } from 'vue'
 import dayjs from 'dayjs'
 import { db } from '@/db'
 
+const DEFAULT_TAGS = ['加班', '熬夜', '出差', '感冒', '经期', '运动', '饮酒', '压力大']
+
 export const useScheduleStore = defineStore('schedule', () => {
   const records = ref([])
   const goals = ref({
@@ -13,6 +15,7 @@ export const useScheduleStore = defineStore('schedule', () => {
     maxCaffeineMg: 200,
     maxScreenMin: 480
   })
+  const tags = ref([...DEFAULT_TAGS])
 
   const todayRecord = computed(() => {
     const today = dayjs().format('YYYY-MM-DD')
@@ -23,6 +26,8 @@ export const useScheduleStore = defineStore('schedule', () => {
     records.value = await db.getAllRecords()
     const savedGoals = await db.getGoals()
     if (savedGoals) goals.value = { ...goals.value, ...JSON.parse(savedGoals) }
+    const savedTags = await db.getTags()
+    if (savedTags && savedTags.length > 0) tags.value = savedTags
   }
 
   async function addRecord(record) {
@@ -35,7 +40,8 @@ export const useScheduleStore = defineStore('schedule', () => {
       napMin: Number(record.napMin) || 0,
       caffeineMg: Number(record.caffeineMg) || 0,
       screenMin: Number(record.screenMin) || 0,
-      note: record.note || ''
+      note: record.note || '',
+      tags: Array.isArray(record.tags) ? record.tags : []
     }
     const existing = records.value.findIndex(r => r.date === normalized.date)
     if (existing >= 0) {
@@ -52,26 +58,49 @@ export const useScheduleStore = defineStore('schedule', () => {
     await db.saveGoals(JSON.stringify(goals.value))
   }
 
-  function getRecordsByRange(startDate, endDate) {
-    return records.value.filter(r => r.date >= startDate && r.date <= endDate)
+  async function addTag(tagName) {
+    const trimmed = tagName.trim()
+    if (!trimmed) return false
+    if (tags.value.includes(trimmed)) return false
+    tags.value.push(trimmed)
+    await db.saveTags(tags.value)
+    return true
   }
 
-  function getRecordsByYear(year) {
+  async function removeTag(tagName) {
+    const idx = tags.value.indexOf(tagName)
+    if (idx >= 0) {
+      tags.value.splice(idx, 1)
+      await db.saveTags(tags.value)
+      return true
+    }
+    return false
+  }
+
+  function getRecordsByRange(startDate, endDate, filterTag = null) {
+    let result = records.value.filter(r => r.date >= startDate && r.date <= endDate)
+    if (filterTag) {
+      result = result.filter(r => Array.isArray(r.tags) && r.tags.includes(filterTag))
+    }
+    return result
+  }
+
+  function getRecordsByYear(year, filterTag = null) {
     const start = `${year}-01-01`
     const end = `${year}-12-31`
-    return getRecordsByRange(start, end)
+    return getRecordsByRange(start, end, filterTag)
   }
 
-  function getLast7Days() {
+  function getLast7Days(filterTag = null) {
     const end = dayjs().format('YYYY-MM-DD')
     const start = dayjs().subtract(6, 'day').format('YYYY-MM-DD')
-    return getRecordsByRange(start, end)
+    return getRecordsByRange(start, end, filterTag)
   }
 
-  function getLast30Days() {
+  function getLast30Days(filterTag = null) {
     const end = dayjs().format('YYYY-MM-DD')
     const start = dayjs().subtract(29, 'day').format('YYYY-MM-DD')
-    return getRecordsByRange(start, end)
+    return getRecordsByRange(start, end, filterTag)
   }
 
   function calcSleepScore(record) {
@@ -105,10 +134,33 @@ export const useScheduleStore = defineStore('schedule', () => {
     return Math.round(Math.min(100, Math.max(0, score)))
   }
 
+  function searchRecords(keyword) {
+    const kw = keyword.trim().toLowerCase()
+    if (!kw) return []
+    return records.value
+      .filter(r => {
+        const noteMatch = r.note && r.note.toLowerCase().includes(kw)
+        const tagMatch = Array.isArray(r.tags) && r.tags.some(t => t.toLowerCase().includes(kw))
+        const dateMatch = r.date.includes(kw)
+        return noteMatch || tagMatch || dateMatch
+      })
+      .sort((a, b) => b.date.localeCompare(a.date))
+      .map(r => ({
+        ...r,
+        score: calcSleepScore(r),
+        matchedFields: [
+          r.note && r.note.toLowerCase().includes(kw) ? '备注' : null,
+          Array.isArray(r.tags) && r.tags.some(t => t.toLowerCase().includes(kw)) ? '标签' : null,
+          r.date.includes(kw) ? '日期' : null
+        ].filter(Boolean)
+      }))
+  }
+
   return {
-    records, goals, todayRecord,
-    loadRecords, addRecord, saveGoals,
-    getRecordsByRange, getRecordsByYear, getLast7Days, getLast30Days, calcSleepScore
+    records, goals, tags, todayRecord,
+    loadRecords, addRecord, saveGoals, addTag, removeTag,
+    getRecordsByRange, getRecordsByYear, getLast7Days, getLast30Days, calcSleepScore,
+    searchRecords
   }
 })
 

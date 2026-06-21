@@ -88,6 +88,53 @@
           <el-form-item label="备注">
             <el-input v-model="form.note" type="textarea" :rows="2" placeholder="记录今日特殊状况..." />
           </el-form-item>
+          <el-form-item label="常用标签">
+            <div class="tags-wrap">
+              <div class="tags-list">
+                <el-tag
+                  v-for="tag in store.tags"
+                  :key="tag"
+                  :type="form.tags.includes(tag) ? 'primary' : 'info'"
+                  :effect="form.tags.includes(tag) ? 'dark' : 'plain'"
+                  round
+                  closable
+                  @close="handleRemoveTagFromLib(tag)"
+                  @click="toggleTag(tag)"
+                  class="tag-item"
+                  :class="{ 'tag-active': form.tags.includes(tag) }"
+                >
+                  {{ tag }}
+                </el-tag>
+              </div>
+              <div class="tags-add">
+                <el-input
+                  v-model="newTagInput"
+                  size="small"
+                  placeholder="新增标签..."
+                  style="width: 120px"
+                  @keyup.enter="handleAddNewTag"
+                />
+                <el-button size="small" type="primary" plain @click="handleAddNewTag" :icon="Plus">
+                  添加
+                </el-button>
+              </div>
+            </div>
+          </el-form-item>
+          <el-form-item v-if="form.tags.length > 0" label="已选标签">
+            <div class="selected-tags">
+              <el-tag
+                v-for="tag in form.tags"
+                :key="tag"
+                type="primary"
+                effect="dark"
+                round
+                closable
+                @close="toggleTag(tag)"
+              >
+                {{ tag }}
+              </el-tag>
+            </div>
+          </el-form-item>
         </el-form>
       </div>
     </div>
@@ -120,7 +167,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { RefreshLeft, Check } from '@element-plus/icons-vue'
+import { RefreshLeft, Check, Plus } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import dayjs from 'dayjs'
 import { useScheduleStore } from '@/store'
@@ -136,8 +183,11 @@ const form = ref({
   napMin: 0,
   caffeineMg: 0,
   screenMin: 0,
-  note: ''
+  note: '',
+  tags: []
 })
+
+const newTagInput = ref('')
 
 const previewScore = computed(() => {
   return store.calcSleepScore(form.value)
@@ -158,6 +208,44 @@ const scoreDesc = computed(() => {
   return '睡眠质量较差，请重视作息健康'
 })
 
+function toggleTag(tag) {
+  const idx = form.value.tags.indexOf(tag)
+  if (idx >= 0) {
+    form.value.tags.splice(idx, 1)
+  } else {
+    form.value.tags.push(tag)
+  }
+}
+
+async function handleAddNewTag() {
+  const val = newTagInput.value.trim()
+  if (!val) return
+  const ok = await store.addTag(val)
+  if (ok) {
+    ElMessage.success(`已添加标签「${val}」')
+    if (!form.value.tags.includes(val)) {
+      form.value.tags.push(val)
+    }
+  } else {
+    ElMessage.warning('标签已存在或为空')
+  }
+  newTagInput.value = ''
+}
+
+async function handleRemoveTagFromLib(tag) {
+  try {
+    await ElMessageBox.confirm(`确定从标签库中删除「${tag}」吗？', '删除标签', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+    await store.removeTag(tag)
+    const idx = form.value.tags.indexOf(tag)
+    if (idx >= 0) form.value.tags.splice(idx, 1)
+    ElMessage.success('标签已删除')
+  } catch {}
+}
+
 function resetForm() {
   form.value = {
     date: dayjs().format('YYYY-MM-DD'),
@@ -168,7 +256,8 @@ function resetForm() {
     napMin: 0,
     caffeineMg: 0,
     screenMin: 0,
-    note: ''
+    note: '',
+    tags: []
   }
 }
 
@@ -213,7 +302,7 @@ function checkAbnormal() {
 onMounted(() => {
   const today = store.todayRecord
   if (today) {
-    form.value = { ...form.value, ...today }
+    form.value = { ...form.value, ...today, tags: today.tags || [] }
   }
 })
 </script>
@@ -332,5 +421,44 @@ onMounted(() => {
       line-height: 1.4;
     }
   }
+}
+
+.tags-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+
+  .tags-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .tags-add {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .tag-item {
+    cursor: pointer;
+    transition: all 0.2s;
+    user-select: none;
+
+    &:hover {
+      transform: translateY(-1px);
+    }
+
+    &.tag-active {
+      box-shadow: 0 2px 8px rgba(126, 184, 216, 0.4);
+    }
+  }
+}
+
+.selected-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 </style>
