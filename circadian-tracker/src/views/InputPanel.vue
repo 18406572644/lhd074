@@ -64,10 +64,34 @@
               <span class="unit">分钟</span>
             </el-form-item>
           </div>
-          <el-form-item label="日间小憩">
-            <el-input-number v-model="form.napMin" :min="0" :max="300" :step="5" controls-position="right" />
-            <span class="unit">分钟</span>
-          </el-form-item>
+          <div class="time-row">
+            <el-form-item label="日间小憩">
+              <el-input-number v-model="form.napMin" :min="0" :max="300" :step="5" controls-position="right" />
+              <span class="unit">分钟</span>
+            </el-form-item>
+            <el-form-item label="入睡潜伏期">
+              <el-input-number v-model="form.sleepLatency" :min="0" :max="180" :step="5" :controls="false" placeholder="上床到睡着的时间" />
+              <span class="unit">分钟</span>
+            </el-form-item>
+          </div>
+          <div class="time-row">
+            <el-form-item label="夜间打鼾">
+              <el-radio-group v-model="form.snoring" size="large">
+                <el-radio-button :value="null">未记录</el-radio-button>
+                <el-radio-button :value="never">从不</el-radio-button>
+                <el-radio-button :value="occasionally">偶尔</el-radio-button>
+                <el-radio-button :value="frequently">经常</el-radio-button>
+              </el-radio-group>
+            </el-form-item>
+            <el-form-item label="呼吸暂停">
+              <el-radio-group v-model="form.breathingPause" size="large">
+                <el-radio-button :value="null">未记录</el-radio-button>
+                <el-radio-button :value="never">从不</el-radio-button>
+                <el-radio-button :value="occasionally">偶尔</el-radio-button>
+                <el-radio-button :value="frequently">经常</el-radio-button>
+              </el-radio-group>
+            </el-form-item>
+          </div>
         </el-form>
       </div>
 
@@ -258,7 +282,10 @@ const form = ref({
   morningEnergy: 0,
   dreamStatus: null,
   dreamDescription: '',
-  nightWakeUps: null
+  nightWakeUps: null,
+  sleepLatency: null,
+  snoring: null,
+  breathingPause: null
 })
 
 const newTagInput = ref('')
@@ -365,7 +392,10 @@ function resetForm() {
     morningEnergy: 0,
     dreamStatus: null,
     dreamDescription: '',
-    nightWakeUps: null
+    nightWakeUps: null,
+    sleepLatency: null,
+    snoring: null,
+    breathingPause: null
   }
 }
 
@@ -421,7 +451,10 @@ onMounted(() => {
       morningEnergy: existing.morningEnergy || 0,
       dreamStatus: existing.dreamStatus || null,
       dreamDescription: existing.dreamDescription || '',
-      nightWakeUps: existing.nightWakeUps || null
+      nightWakeUps: existing.nightWakeUps || null,
+      sleepLatency: existing.sleepLatency || null,
+      snoring: existing.snoring || null,
+      breathingPause: existing.breathingPause || null
     }
   }
 })

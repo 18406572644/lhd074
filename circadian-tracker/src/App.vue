@@ -111,6 +111,7 @@
             <div><kbd>Ctrl+Shift+I</kbd> 录入</div>
             <div><kbd>Ctrl+Shift+C</kbd> 日历</div>
             <div><kbd>Ctrl+Shift+S</kbd> 睡眠</div>
+            <div><kbd>Ctrl+Shift+K</kbd> 知识库</div>
             <div><kbd>Ctrl+Shift+J</kbd> 时差</div>
             <div><kbd>Ctrl+Shift+E</kbd> 导出</div>
           </div>
@@ -203,6 +204,7 @@ const navItems = [
   { path: '/import', label: '数据导入', icon: 'Upload' },
   { path: '/calendar', label: '日历视图', icon: 'Calendar' },
   { path: '/sleep', label: '睡眠详情', icon: 'Moon' },
+  { path: '/knowledge', label: '医学知识库', icon: 'Reading' },
   { path: '/jetlag', label: '时差调整', icon: 'Promotion' }
 ]
 
@@ -236,6 +238,41 @@ function minimize() { window.electronAPI?.minimizeWindow() }
 function maximize() { window.electronAPI?.maximizeWindow() }
 function close() { window.electronAPI?.closeWindow() }
 
+function handleKeydown(e) {
+  if (e.ctrlKey && e.shiftKey) {
+    switch (e.key.toLowerCase()) {
+      case 'd':
+        e.preventDefault()
+        router.push('/')
+        break
+      case 'i':
+        e.preventDefault()
+        router.push('/input')
+        break
+      case 'c':
+        e.preventDefault()
+        router.push('/calendar')
+        break
+      case 's':
+        e.preventDefault()
+        router.push('/sleep')
+        break
+      case 'k':
+        e.preventDefault()
+        router.push('/knowledge')
+        break
+      case 'j':
+        e.preventDefault()
+        router.push('/jetlag')
+        break
+      case 'e':
+        e.preventDefault()
+        handleExportPdf()
+        break
+    }
+  }
+}
+
 onMounted(async () => {
   themeStore.initTheme()
   await scheduleStore.loadRecords()
@@ -255,6 +292,7 @@ onMounted(async () => {
 
   window.addEventListener('export-pdf', handleExportPdf)
   document.addEventListener('click', handleDocumentClick)
+  document.addEventListener('keydown', handleKeydown)
 
   setTimeout(() => {
     if (checkShouldShowMorningDialog()) {
@@ -265,6 +303,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   document.removeEventListener('click', handleDocumentClick)
+  document.removeEventListener('keydown', handleKeydown)
 })
 
 async function handleExportPdf() {

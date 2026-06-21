@@ -22,6 +22,44 @@
       @takeAction="handlePredictionAction"
     />
 
+    <div v-if="diagnosticResult.hasData && diagnosticResult.diagnoses.length > 0" class="ct-card diagnosis-alert-card">
+      <div class="diagnosis-alert-header">
+        <div class="alert-title">
+          <el-icon :size="24" color="#f56c6c"><Bell /></el-icon>
+          <span>智能诊断提示</span>
+          <el-tag size="small" type="danger" effect="dark" style="margin-left: 8px">
+            {{ diagnosticResult.diagnoses.length }} 项异常
+          </el-tag>
+        </div>
+        <el-button type="primary" plain size="small" @click="goToKnowledge">
+          查看详情 <el-icon><ArrowRightBold /></el-icon>
+        </el-button>
+      </div>
+      <div class="diagnosis-alert-list">
+        <div
+          v-for="d in diagnosticResult.diagnoses.filter(x => x.matchLevel !== 'low').slice(0, 2)"
+          :key="d.id"
+          class="alert-item"
+          :class="d.matchLevel"
+        >
+          <div class="alert-item-header">
+            <span class="alert-name">{{ d.name }}</span>
+            <span class="alert-confidence">匹配度 {{ d.confidence }}%</span>
+          </div>
+          <p class="alert-suggestion">{{ d.suggestion }}</p>
+          <div class="alert-matched">
+            <span v-for="(c, i) in d.matchingCriteria.slice(0, 2)" :key="i" class="matched-tag">
+              {{ c }}
+            </span>
+          </div>
+        </div>
+      </div>
+      <div class="diagnosis-disclaimer">
+        <el-icon><InfoFilled /></el-icon>
+        {{ diagnosticResult.disclaimer }}
+      </div>
+    </div>
+
     <div class="stats-row">
       <div class="ct-card stat-card" v-for="stat in todayStats" :key="stat.label">
         <div class="stat-icon" :style="{ background: stat.color }">
@@ -156,7 +194,7 @@
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElNotification } from 'element-plus'
-import { Download } from '@element-plus/icons-vue'
+import { Download, Bell, ArrowRightBold } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import * as echarts from 'echarts'
 import { useScheduleStore } from '@/store'
@@ -190,9 +228,14 @@ const todayRecord = computed(() => store.todayRecord)
 const todayScore = computed(() => store.calcSleepScore(todayRecord.value))
 
 const last30Records = computed(() => store.getLast30Days())
+const diagnosticResult = computed(() => store.diagnosticResult)
 
 function handlePredictionAction() {
   router.push('/input')
+}
+
+function goToKnowledge() {
+  router.push('/knowledge')
 }
 
 const todayScoreType = computed(() => {
@@ -724,6 +767,107 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+.diagnosis-alert-card {
+  background: linear-gradient(135deg, rgba(245, 108, 108, 0.05), rgba(230, 162, 60, 0.05));
+  border: 1px solid rgba(245, 108, 108, 0.2);
+
+  .diagnosis-alert-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+
+    .alert-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--ct-text);
+    }
+  }
+
+  .diagnosis-alert-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 16px;
+
+    .alert-item {
+      padding: 14px;
+      border-radius: 10px;
+      background: var(--ct-surface);
+      border-left: 4px solid;
+
+      &.high {
+        border-left-color: #f56c6c;
+        background: rgba(245, 108, 108, 0.05);
+      }
+      &.medium {
+        border-left-color: #e6a23c;
+        background: rgba(230, 162, 60, 0.05);
+      }
+
+      .alert-item-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 6px;
+
+        .alert-name {
+          font-size: 14px;
+          font-weight: 600;
+          color: var(--ct-text);
+        }
+
+        .alert-confidence {
+          font-size: 12px;
+          color: var(--ct-text-secondary);
+          font-weight: 500;
+        }
+      }
+
+      .alert-suggestion {
+        font-size: 13px;
+        color: var(--ct-text-secondary);
+        margin: 0 0 8px 0;
+        line-height: 1.5;
+      }
+
+      .alert-matched {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+
+        .matched-tag {
+          font-size: 11px;
+          padding: 3px 8px;
+          background: var(--ct-primary-lighter);
+          color: var(--ct-primary-dark);
+          border-radius: 4px;
+        }
+      }
+    }
+  }
+
+  .diagnosis-disclaimer {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 14px;
+    background: rgba(144, 147, 153, 0.1);
+    border-radius: 8px;
+    font-size: 12px;
+    color: var(--ct-text-secondary);
+    line-height: 1.5;
+
+    .el-icon {
+      color: #909399;
+      flex-shrink: 0;
+    }
+  }
 }
 
 .dashboard-header {

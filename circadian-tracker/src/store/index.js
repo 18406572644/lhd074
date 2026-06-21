@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import dayjs from 'dayjs'
 import { db } from '@/db'
 import { SleepScorer } from '@/utils/scorers'
+import { diagnosticEngine } from '@/utils/diagnosticEngine'
 
 const DEFAULT_TAGS = ['加班', '熬夜', '出差', '感冒', '经期', '运动', '饮酒', '压力大']
 
@@ -18,6 +19,10 @@ export const useScheduleStore = defineStore('schedule', () => {
     maxScreenMin: 480
   })
   const tags = ref([...DEFAULT_TAGS])
+  const assessments = ref({
+    epworth: null,
+    isi: null
+  })
 
   const todayRecord = computed(() => {
     const today = dayjs().format('YYYY-MM-DD')
@@ -51,7 +56,10 @@ export const useScheduleStore = defineStore('schedule', () => {
       morningEnergy: Number(record.morningEnergy) || 0,
       dreamStatus: record.dreamStatus || null,
       dreamDescription: record.dreamDescription || '',
-      nightWakeUps: record.nightWakeUps || null
+      nightWakeUps: record.nightWakeUps || null,
+      sleepLatency: record.sleepLatency !== undefined && record.sleepLatency !== null ? Number(record.sleepLatency) : null,
+      snoring: record.snoring || null,
+      breathingPause: record.breathingPause || null
     }
     const existing = records.value.findIndex(r => r.date === normalized.date)
     if (existing >= 0) {
@@ -174,12 +182,28 @@ export const useScheduleStore = defineStore('schedule', () => {
       }))
   }
 
+  const diagnosticResult = computed(() => {
+    return diagnosticEngine.analyze(records.value, assessments.value)
+  })
+
+  function setEpworthScore(result) {
+    assessments.value.epworth = result
+  }
+
+  function setISIScore(result) {
+    assessments.value.isi = result
+  }
+
+  function getDiagnosticEngine() {
+    return diagnosticEngine
+  }
+
   return {
-    records, goals, tags, mappingTemplates, todayRecord, scorer,
+    records, goals, tags, mappingTemplates, assessments, todayRecord, scorer, diagnosticResult,
     loadRecords, addRecord, deleteRecord, saveGoals, addTag, removeTag,
     addMappingTemplate, removeMappingTemplate, saveMappingTemplatesLocal,
     getRecordsByRange, getRecordsByYear, getLast7Days, getLast30Days, calcSleepScore,
-    searchRecords
+    searchRecords, setEpworthScore, setISIScore, getDiagnosticEngine
   }
 })
 
