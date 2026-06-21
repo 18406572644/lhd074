@@ -222,7 +222,7 @@ async function handleAddNewTag() {
   if (!val) return
   const ok = await store.addTag(val)
   if (ok) {
-    ElMessage.success(`已添加标签「${val}」')
+    ElMessage.success(`已添加标签「${val}」`)
     if (!form.value.tags.includes(val)) {
       form.value.tags.push(val)
     }
@@ -234,7 +234,7 @@ async function handleAddNewTag() {
 
 async function handleRemoveTagFromLib(tag) {
   try {
-    await ElMessageBox.confirm(`确定从标签库中删除「${tag}」吗？', '删除标签', {
+    await ElMessageBox.confirm(`确定从标签库中删除「${tag}」吗？`, '删除标签', {
       confirmButtonText: '确定',
       cancelButtonText: '取消',
       type: 'warning'

@@ -15,6 +15,13 @@
       </div>
     </div>
 
+    <PredictionCard
+      :records="last30Records"
+      :calcSleepScore="store.calcSleepScore"
+      :goals="store.goals"
+      @takeAction="handlePredictionAction"
+    />
+
     <div class="stats-row">
       <div class="ct-card stat-card" v-for="stat in todayStats" :key="stat.label">
         <div class="stat-icon" :style="{ background: stat.color }">
@@ -147,14 +154,19 @@
 
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
+import { useRouter } from 'vue-router'
+import { ElNotification } from 'element-plus'
 import { Download } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import * as echarts from 'echarts'
 import { useScheduleStore } from '@/store'
 import { useThemeStore } from '@/store'
+import PredictionCard from '@/components/PredictionCard.vue'
+import { shouldShowNoonReminder, getNoonReminderText } from '@/utils/prediction'
 
 const store = useScheduleStore()
 const themeStore = useThemeStore()
+const router = useRouter()
 const chartRange = ref('7')
 
 const trendChartRef = ref(null)
@@ -176,6 +188,12 @@ const heatmapYearOptions = [currentYear, currentYear - 1]
 const todayRecord = computed(() => store.todayRecord)
 
 const todayScore = computed(() => store.calcSleepScore(todayRecord.value))
+
+const last30Records = computed(() => store.getLast30Days())
+
+function handlePredictionAction() {
+  router.push('/input')
+}
 
 const todayScoreType = computed(() => {
   const s = todayScore.value
@@ -678,6 +696,17 @@ watch(() => themeStore.isDark, () => {
 onMounted(() => {
   renderAll()
   window.addEventListener('resize', handleResize)
+
+  if (shouldShowNoonReminder(store.records)) {
+    const text = getNoonReminderText(store.records)
+    ElNotification({
+      title: '作息趋势提醒',
+      message: text,
+      type: 'warning',
+      duration: 8000,
+      position: 'top-right'
+    })
+  }
 })
 
 onBeforeUnmount(() => {
