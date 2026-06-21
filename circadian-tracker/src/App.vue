@@ -111,6 +111,7 @@
             <div><kbd>Ctrl+Shift+I</kbd> 录入</div>
             <div><kbd>Ctrl+Shift+C</kbd> 日历</div>
             <div><kbd>Ctrl+Shift+S</kbd> 睡眠</div>
+            <div><kbd>Ctrl+Shift+J</kbd> 时差</div>
             <div><kbd>Ctrl+Shift+E</kbd> 导出</div>
           </div>
           <div class="settings-entry" @click="showSettings = true">
@@ -201,7 +202,8 @@ const navItems = [
   { path: '/input', label: '作息录入', icon: 'EditPen' },
   { path: '/import', label: '数据导入', icon: 'Upload' },
   { path: '/calendar', label: '日历视图', icon: 'Calendar' },
-  { path: '/sleep', label: '睡眠详情', icon: 'Moon' }
+  { path: '/sleep', label: '睡眠详情', icon: 'Moon' },
+  { path: '/jetlag', label: '时差调整', icon: 'Promotion' }
 ]
 
 const searchResults = computed(() => {

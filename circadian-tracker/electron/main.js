@@ -309,6 +309,9 @@ function registerShortcuts() {
   globalShortcut.register('CommandOrControl+Shift+S', () => {
     if (mainWindow) { mainWindow.show(), mainWindow.webContents.send('navigate-to', '/sleep') }
   })
+  globalShortcut.register('CommandOrControl+Shift+J', () => {
+    if (mainWindow) { mainWindow.show(), mainWindow.webContents.send('navigate-to', '/jetlag') }
+  })
   globalShortcut.register('CommandOrControl+Shift+E', () => {
     if (mainWindow) mainWindow.webContents.send('export-pdf')
   })
