@@ -45,6 +45,12 @@ export const useScheduleStore = defineStore('schedule', () => {
     return records.value.filter(r => r.date >= startDate && r.date <= endDate)
   }
 
+  function getRecordsByYear(year) {
+    const start = `${year}-01-01`
+    const end = `${year}-12-31`
+    return getRecordsByRange(start, end)
+  }
+
   function getLast7Days() {
     const end = dayjs().format('YYYY-MM-DD')
     const start = dayjs().subtract(6, 'day').format('YYYY-MM-DD')
@@ -91,7 +97,7 @@ export const useScheduleStore = defineStore('schedule', () => {
   return {
     records, goals, todayRecord,
     loadRecords, addRecord, saveGoals,
-    getRecordsByRange, getLast7Days, getLast30Days, calcSleepScore
+    getRecordsByRange, getRecordsByYear, getLast7Days, getLast30Days, calcSleepScore
   }
 })
 

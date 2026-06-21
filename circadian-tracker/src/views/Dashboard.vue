@@ -83,6 +83,40 @@
         </div>
       </div>
     </div>
+
+    <div class="ct-card heatmap-card">
+      <div class="ct-title">
+        <el-icon><Calendar /></el-icon>
+        年度热力日历
+        <el-select v-model="heatmapYear" size="small" style="margin-left: auto; width: 100px">
+          <el-option
+            v-for="y in heatmapYearOptions"
+            :key="y"
+            :label="y + '年'"
+            :value="y"
+          />
+        </el-select>
+      </div>
+      <div class="heatmap-chart-container" ref="heatmapChartRef"></div>
+      <div class="heatmap-stats">
+        <div class="heatmap-stat-item">
+          <span class="heatmap-stat-value">{{ yearStats.totalDays }}</span>
+          <span class="heatmap-stat-label">总录入天数</span>
+        </div>
+        <div class="heatmap-stat-item">
+          <span class="heatmap-stat-value">{{ yearStats.avgScore }}</span>
+          <span class="heatmap-stat-label">平均评分</span>
+        </div>
+        <div class="heatmap-stat-item">
+          <span class="heatmap-stat-value">{{ yearStats.excellentDays }}</span>
+          <span class="heatmap-stat-label">优秀天数</span>
+        </div>
+        <div class="heatmap-stat-item">
+          <span class="heatmap-stat-value">{{ yearStats.maxStreak }}</span>
+          <span class="heatmap-stat-label">连续打卡最长天数</span>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -99,6 +133,12 @@ const trendChartRef = ref(null)
 const pieChartRef = ref(null)
 let trendChart = null
 let pieChart = null
+
+const heatmapChartRef = ref(null)
+let heatmapChart = null
+const currentYear = dayjs().year()
+const heatmapYear = ref(currentYear)
+const heatmapYearOptions = [currentYear, currentYear - 1]
 
 const todayRecord = computed(() => store.todayRecord)
 
@@ -272,20 +312,157 @@ function renderPieChart() {
   })
 }
 
+const yearStats = computed(() => {
+  const yearRecords = store.getRecordsByYear(heatmapYear.value)
+  const totalDays = yearRecords.length
+  if (totalDays === 0) {
+    return { totalDays: 0, avgScore: '--', excellentDays: 0, maxStreak: 0 }
+  }
+  const scores = yearRecords.map(r => store.calcSleepScore(r))
+  const avgScore = (scores.reduce((a, b) => a + b, 0) / totalDays).toFixed(1)
+  const excellentDays = scores.filter(s => s >= 80).length
+
+  const sortedDates = yearRecords.map(r => r.date).sort()
+  let maxStreak = 1
+  let currentStreak = 1
+  for (let i = 1; i < sortedDates.length; i++) {
+    const diff = dayjs(sortedDates[i]).diff(dayjs(sortedDates[i - 1]), 'day')
+    if (diff === 1) {
+      currentStreak++
+      maxStreak = Math.max(maxStreak, currentStreak)
+    } else if (diff > 1) {
+      currentStreak = 1
+    }
+  }
+  if (sortedDates.length === 0) maxStreak = 0
+
+  return { totalDays, avgScore, excellentDays, maxStreak }
+})
+
+function getScoreColor(score) {
+  if (score >= 80) return '#2b6cb0'
+  if (score >= 60) return '#7eb8d8'
+  if (score >= 40) return '#e6a23c'
+  return '#f56c6c'
+}
+
+function renderHeatmapChart() {
+  if (!heatmapChartRef.value) return
+  if (!heatmapChart) {
+    heatmapChart = echarts.init(heatmapChartRef.value)
+  }
+
+  const year = heatmapYear.value
+  const yearRecords = store.getRecordsByYear(year)
+  const recordMap = {}
+  yearRecords.forEach(r => {
+    recordMap[r.date] = r
+  })
+
+  const heatmapData = []
+  const weekdayNames = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+
+  yearRecords.forEach(r => {
+    const score = store.calcSleepScore(r)
+    heatmapData.push([r.date, score])
+  })
+
+  heatmapChart.setOption({
+    tooltip: {
+      formatter(params) {
+        const dateStr = params.value[0]
+        const score = params.value[1]
+        const d = dayjs(dateStr)
+        const record = recordMap[dateStr]
+        const weekday = weekdayNames[d.day()]
+        let html = `<div style="font-size:13px;line-height:1.6">`
+        html += `<div style="font-weight:700;margin-bottom:4px">${d.format('YYYY年MM月DD日')} ${weekday}</div>`
+        const color = getScoreColor(score)
+        html += `<div>睡眠评分：<span style="color:${color};font-weight:700">${score}</span> 分</div>`
+        if (record) {
+          html += `<div>入睡：${record.bedtime}　起床：${record.wakeTime}</div>`
+          html += `<div>深睡：${record.deepSleep}min　浅睡：${record.lightSleep}min</div>`
+        }
+        html += `</div>`
+        return html
+      }
+    },
+    visualMap: {
+      min: 0,
+      max: 100,
+      type: 'piecewise',
+      show: false,
+      pieces: [
+        { min: 0, max: 39, color: '#f56c6c' },
+        { min: 40, max: 59, color: '#e6a23c' },
+        { min: 60, max: 79, color: '#7eb8d8' },
+        { min: 80, max: 100, color: '#2b6cb0' }
+      ]
+    },
+    calendar: {
+      top: 30,
+      left: 50,
+      right: 30,
+      bottom: 10,
+      range: year,
+      cellSize: ['auto', 14],
+      splitLine: {
+        show: true,
+        lineStyle: { color: '#dce4ec' }
+      },
+      itemStyle: {
+        borderWidth: 2,
+        borderColor: '#fff'
+      },
+      yearLabel: { show: false },
+      dayLabel: {
+        firstDay: 1,
+        color: '#7f8c9b',
+        fontSize: 11,
+        nameMap: ['日', '一', '二', '三', '四', '五', '六']
+      },
+      monthLabel: {
+        color: '#7f8c9b',
+        fontSize: 11,
+        nameMap: 'cn'
+      }
+    },
+    series: [{
+      type: 'heatmap',
+      coordinateSystem: 'calendar',
+      data: heatmapData,
+      itemStyle: {
+        borderColor: '#fff',
+        borderWidth: 2,
+        borderRadius: 2
+      },
+      emphasis: {
+        itemStyle: {
+          borderColor: '#333',
+          borderWidth: 1
+        }
+      }
+    }]
+  }, true)
+}
+
 function handleExportPdf() {
   window.dispatchEvent(new CustomEvent('export-pdf'))
 }
 
 watch(chartRange, () => { nextTick(renderTrendChart) })
+watch(heatmapYear, () => { nextTick(renderHeatmapChart) })
 
 onMounted(() => {
   nextTick(() => {
     renderTrendChart()
     renderPieChart()
+    renderHeatmapChart()
   })
   window.addEventListener('resize', () => {
     trendChart?.resize()
     pieChart?.resize()
+    heatmapChart?.resize()
   })
 })
 </script>
@@ -422,6 +599,38 @@ onMounted(() => {
           &.warn { color: #e6a23c; }
           &.bad { color: #f56c6c; }
         }
+      }
+    }
+  }
+}
+
+.heatmap-card {
+  .heatmap-chart-container {
+    height: 180px;
+  }
+
+  .heatmap-stats {
+    display: flex;
+    justify-content: space-around;
+    padding-top: 14px;
+    border-top: 1px solid var(--ct-border);
+    margin-top: 8px;
+
+    .heatmap-stat-item {
+      text-align: center;
+
+      .heatmap-stat-value {
+        display: block;
+        font-size: 20px;
+        font-weight: 700;
+        color: var(--ct-primary);
+      }
+
+      .heatmap-stat-label {
+        display: block;
+        font-size: 11px;
+        color: var(--ct-text-secondary);
+        margin-top: 4px;
       }
     }
   }
