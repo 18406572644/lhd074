@@ -1,8 +1,140 @@
 const { app, BrowserWindow, Tray, Menu, ipcMain, globalShortcut, nativeTheme, Notification } = require('electron')
 const path = require('path')
+const fs = require('fs')
 
 let mainWindow = null
 let tray = null
+
+const DEFAULT_SETTINGS = {
+  bedtimeReminder: {
+    enabled: true,
+    time: '23:00'
+  },
+  lateNightReminder: {
+    enabled: true,
+    startTime: '01:00'
+  },
+  wakeUpReminder: {
+    enabled: false,
+    time: '07:00'
+  },
+  dailyEntryReminder: {
+    enabled: true,
+    time: '22:30'
+  },
+  autoStart: true
+}
+
+let settings = { ...DEFAULT_SETTINGS }
+const triggeredReminders = new Set()
+
+function getSettingsPath() {
+  return path.join(app.getPath('userData'), 'settings.json')
+}
+
+function loadSettings() {
+  try {
+    const settingsPath = getSettingsPath()
+    if (fs.existsSync(settingsPath)) {
+      const raw = fs.readFileSync(settingsPath, 'utf-8')
+      const parsed = JSON.parse(raw)
+      settings = {
+        bedtimeReminder: { ...DEFAULT_SETTINGS.bedtimeReminder, ...(parsed.bedtimeReminder || {}) },
+        lateNightReminder: { ...DEFAULT_SETTINGS.lateNightReminder, ...(parsed.lateNightReminder || {}) },
+        wakeUpReminder: { ...DEFAULT_SETTINGS.wakeUpReminder, ...(parsed.wakeUpReminder || {}) },
+        dailyEntryReminder: { ...DEFAULT_SETTINGS.dailyEntryReminder, ...(parsed.dailyEntryReminder || {}) },
+        autoStart: parsed.autoStart !== undefined ? parsed.autoStart : DEFAULT_SETTINGS.autoStart
+      }
+    }
+  } catch {
+    settings = { ...DEFAULT_SETTINGS }
+  }
+}
+
+function saveSettings() {
+  try {
+    const settingsPath = getSettingsPath()
+    fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2))
+  } catch {
+    console.error('Failed to save settings')
+  }
+}
+
+function parseTime(timeStr) {
+  const [h, m] = timeStr.split(':').map(Number)
+  return { hour: h, minute: m }
+}
+
+function getTodayKey() {
+  const now = new Date()
+  return `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`
+}
+
+function checkReminders() {
+  const now = new Date()
+  const currentHour = now.getHours()
+  const currentMinute = now.getMinutes()
+  const todayKey = getTodayKey()
+
+  if (settings.bedtimeReminder.enabled) {
+    const { hour, minute } = parseTime(settings.bedtimeReminder.time)
+    const key = `bedtime-${todayKey}`
+    if (currentHour === hour && currentMinute >= minute && currentMinute < minute + 5 && !triggeredReminders.has(key)) {
+      new Notification({
+        title: '就寝提醒',
+        body: `已到${settings.bedtimeReminder.time}，建议您尽快准备休息。`,
+        icon: path.join(__dirname, 'icon.png')
+      }).show()
+      triggeredReminders.add(key)
+    }
+  }
+
+  if (settings.lateNightReminder.enabled) {
+    const { hour } = parseTime(settings.lateNightReminder.startTime)
+    const endHour = 5
+    if (currentHour >= hour && currentHour < endHour) {
+      const key = `latenight-${todayKey}-${currentHour}`
+      if (!triggeredReminders.has(key)) {
+        new Notification({
+          title: '作息异常提醒',
+          body: `当前已过凌晨${hour}点，您仍未休息，请注意作息健康！`,
+          icon: path.join(__dirname, 'icon.png')
+        }).show()
+        triggeredReminders.add(key)
+      }
+    }
+  }
+
+  if (settings.wakeUpReminder.enabled) {
+    const { hour, minute } = parseTime(settings.wakeUpReminder.time)
+    const key = `wakeup-${todayKey}`
+    if (currentHour === hour && currentMinute >= minute && currentMinute < minute + 5 && !triggeredReminders.has(key)) {
+      new Notification({
+        title: '起床打卡提醒',
+        body: `已到目标起床时间${settings.wakeUpReminder.time}，新的一天开始啦！记得完成作息打卡哦。`,
+        icon: path.join(__dirname, 'icon.png')
+      }).show()
+      triggeredReminders.add(key)
+    }
+  }
+
+  if (settings.dailyEntryReminder.enabled) {
+    const { hour, minute } = parseTime(settings.dailyEntryReminder.time)
+    const key = `dailyentry-${todayKey}`
+    if (currentHour === hour && currentMinute >= minute && currentMinute < minute + 5 && !triggeredReminders.has(key)) {
+      new Notification({
+        title: '每日录入提醒',
+        body: `已到${settings.dailyEntryReminder.time}，请记得完成今日作息数据录入。`,
+        icon: path.join(__dirname, 'icon.png')
+      }).show()
+      triggeredReminders.add(key)
+    }
+  }
+
+  if (now.getHours() === 0 && now.getMinutes() < 5) {
+    triggeredReminders.clear()
+  }
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -76,34 +208,16 @@ function registerShortcuts() {
   })
 }
 
-function checkAbnormalSchedule() {
-  const now = new Date()
-  const hour = now.getHours()
-  if (hour >= 1 && hour <= 4) {
-    new Notification({
-      title: '作息异常提醒',
-      body: '当前已过凌晨1点，您仍未休息，请注意作息健康！',
-      icon: path.join(__dirname, 'icon.png')
-    }).show()
-  }
-  if (hour >= 23) {
-    new Notification({
-      title: '就寝提醒',
-      body: '已到晚间11点，建议您尽快准备休息。',
-      icon: path.join(__dirname, 'icon.png')
-    }).show()
-  }
-}
-
 app.whenReady().then(() => {
+  loadSettings()
   createWindow()
   createTray()
   registerShortcuts()
 
-  setInterval(checkAbnormalSchedule, 3600000)
-  setTimeout(checkAbnormalSchedule, 5000)
+  setInterval(checkReminders, 60000)
+  setTimeout(checkReminders, 5000)
 
-  app.setLoginItemSettings({ openAtLogin: true })
+  app.setLoginItemSettings({ openAtLogin: settings.autoStart })
 })
 
 app.on('window-all-closed', () => {
@@ -133,4 +247,19 @@ ipcMain.on('set-auto-start', (e, enable) => { app.setLoginItemSettings({ openAtL
 ipcMain.on('get-theme', (e) => { e.returnValue = nativeTheme.shouldUseDarkColors ? 'dark' : 'light' })
 ipcMain.on('show-notification', (e, title, body) => {
   new Notification({ title, body, icon: path.join(__dirname, 'icon.png') }).show()
+})
+ipcMain.on('get-settings', (e) => {
+  e.returnValue = JSON.parse(JSON.stringify(settings))
+})
+ipcMain.on('set-settings', (e, newSettings) => {
+  settings = {
+    bedtimeReminder: { ...settings.bedtimeReminder, ...(newSettings.bedtimeReminder || {}) },
+    lateNightReminder: { ...settings.lateNightReminder, ...(newSettings.lateNightReminder || {}) },
+    wakeUpReminder: { ...settings.wakeUpReminder, ...(newSettings.wakeUpReminder || {}) },
+    dailyEntryReminder: { ...settings.dailyEntryReminder, ...(newSettings.dailyEntryReminder || {}) },
+    autoStart: newSettings.autoStart !== undefined ? newSettings.autoStart : settings.autoStart
+  }
+  saveSettings()
+  app.setLoginItemSettings({ openAtLogin: settings.autoStart })
+  e.returnValue = true
 })

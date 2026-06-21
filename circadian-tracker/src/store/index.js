@@ -126,3 +126,43 @@ export const useThemeStore = defineStore('theme', () => {
 
   return { isDark, initTheme, toggleTheme }
 })
+
+export const useSettingsStore = defineStore('settings', () => {
+  const settings = ref({
+    bedtimeReminder: {
+      enabled: true,
+      time: '23:00'
+    },
+    lateNightReminder: {
+      enabled: true,
+      startTime: '01:00'
+    },
+    wakeUpReminder: {
+      enabled: false,
+      time: '07:00'
+    },
+    dailyEntryReminder: {
+      enabled: true,
+      time: '22:30'
+    },
+    autoStart: true
+  })
+
+  function loadSettings() {
+    if (window.electronAPI) {
+      const saved = window.electronAPI.getSettings()
+      if (saved) {
+        settings.value = { ...settings.value, ...saved }
+      }
+    }
+  }
+
+  function saveSettings(newSettings) {
+    settings.value = { ...settings.value, ...newSettings }
+    if (window.electronAPI) {
+      window.electronAPI.setSettings(settings.value)
+    }
+  }
+
+  return { settings, loadSettings, saveSettings }
+})

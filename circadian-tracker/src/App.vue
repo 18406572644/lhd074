@@ -45,6 +45,10 @@
             <div><kbd>Ctrl+Shift+S</kbd> 睡眠</div>
             <div><kbd>Ctrl+Shift+E</kbd> 导出</div>
           </div>
+          <div class="settings-entry" @click="showSettings = true">
+            <el-icon :size="16"><Setting /></el-icon>
+            <span>系统设置</span>
+          </div>
         </div>
       </aside>
       <main class="main-content">
@@ -56,6 +60,7 @@
       </main>
     </div>
     <PdfTemplate v-if="reportData" :reportData="reportData" ref="pdfRef" />
+    <SettingsDialog v-model="showSettings" />
   </div>
 </template>
 
@@ -65,15 +70,18 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import html2canvas from 'html2canvas'
 import { jsPDF } from 'jspdf'
-import { useScheduleStore, useThemeStore } from '@/store'
+import { useScheduleStore, useThemeStore, useSettingsStore } from '@/store'
 import { generateMonthlyReport } from '@/utils/pdf'
 import PdfTemplate from '@/components/PdfTemplate.vue'
+import SettingsDialog from '@/components/SettingsDialog.vue'
 
 const router = useRouter()
 const scheduleStore = useScheduleStore()
 const themeStore = useThemeStore()
+const settingsStore = useSettingsStore()
 const reportData = ref(null)
 const pdfRef = ref(null)
+const showSettings = ref(false)
 
 const navItems = [
   { path: '/', label: '数据仪表盘', icon: 'DataBoard' },
@@ -89,6 +97,7 @@ function close() { window.electronAPI?.closeWindow() }
 onMounted(() => {
   themeStore.initTheme()
   scheduleStore.loadRecords()
+  settingsStore.loadSettings()
 
   if (window.electronAPI) {
     window.electronAPI.onNavigateTo((route) => {
@@ -288,6 +297,31 @@ async function handleExportPdf() {
         padding: 0 4px;
         font-size: 9px;
         font-family: monospace;
+      }
+    }
+
+    .settings-entry {
+      margin-top: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--ct-text-secondary);
+      border: 1px solid var(--ct-border);
+      transition: all 0.2s;
+
+      &:hover {
+        background: var(--ct-primary-lighter);
+        color: var(--ct-primary-dark);
+        border-color: var(--ct-primary-light);
+      }
+
+      .el-icon {
+        color: inherit;
       }
     }
   }
