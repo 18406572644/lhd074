@@ -558,7 +558,7 @@
 </template>
 
 <script setup>
-import { ref, computed, nextTick } from 'vue'
+import { ref, computed, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { Search, Reading, Clock, DataAnalysis, Bell, WarningFilled, InfoFilled, CircleCheck, QuestionFilled, SwitchButton, Link, ChatDotRound, Medal, MagicStick, Aim, List, Warning, Files, Calendar, SetUp, AlarmClock, View, Operation, Document, CircleCheckFilled } from '@element-plus/icons-vue'
 import { useScheduleStore } from '@/store'
