@@ -86,6 +86,14 @@ export const useScheduleStore = defineStore('schedule', () => {
     return false
   }
 
+  async function deleteRecord(date) {
+    const idx = records.value.findIndex(r => r.date === date)
+    if (idx >= 0) {
+      records.value.splice(idx, 1)
+      await db.deleteRecord(date)
+    }
+  }
+
   async function addMappingTemplate(template) {
     mappingTemplates.value.push(template)
     await db.saveMappingTemplates(mappingTemplates.value)
@@ -184,7 +192,7 @@ export const useScheduleStore = defineStore('schedule', () => {
 
   return {
     records, goals, tags, mappingTemplates, todayRecord,
-    loadRecords, addRecord, saveGoals, addTag, removeTag,
+    loadRecords, addRecord, deleteRecord, saveGoals, addTag, removeTag,
     addMappingTemplate, removeMappingTemplate, saveMappingTemplatesLocal,
     getRecordsByRange, getRecordsByYear, getLast7Days, getLast30Days, calcSleepScore,
     searchRecords

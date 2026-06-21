@@ -224,15 +224,25 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { RefreshLeft, Check, Plus, Moon, ArrowDown } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import dayjs from 'dayjs'
 import { useScheduleStore } from '@/store'
 
+const route = useRoute()
 const store = useScheduleStore()
 
+function getInitialDate() {
+  const dateQuery = route.query.date
+  if (typeof dateQuery === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateQuery)) {
+    return dateQuery
+  }
+  return dayjs().format('YYYY-MM-DD')
+}
+
 const form = ref({
-  date: dayjs().format('YYYY-MM-DD'),
+  date: getInitialDate(),
   bedtime: '23:00',
   wakeTime: '07:00',
   deepSleep: 120,
@@ -339,7 +349,7 @@ async function handleRemoveTagFromLib(tag) {
 
 function resetForm() {
   form.value = {
-    date: dayjs().format('YYYY-MM-DD'),
+    date: getInitialDate(),
     bedtime: '23:00',
     wakeTime: '07:00',
     deepSleep: 120,
@@ -398,19 +408,20 @@ function checkAbnormal() {
 }
 
 onMounted(() => {
-  const today = store.todayRecord
-  if (today) {
+  const initialDate = getInitialDate()
+  const existing = store.records.find(r => r.date === initialDate)
+  if (existing) {
     form.value = {
       ...form.value,
-      ...today,
-      tags: today.tags || [],
-      preSleepMood: today.preSleepMood || null,
-      preSleepActivities: today.preSleepActivities || [],
-      preSleepThoughts: today.preSleepThoughts || 0,
-      morningEnergy: today.morningEnergy || 0,
-      dreamStatus: today.dreamStatus || null,
-      dreamDescription: today.dreamDescription || '',
-      nightWakeUps: today.nightWakeUps || null
+      ...existing,
+      tags: existing.tags || [],
+      preSleepMood: existing.preSleepMood || null,
+      preSleepActivities: existing.preSleepActivities || [],
+      preSleepThoughts: existing.preSleepThoughts || 0,
+      morningEnergy: existing.morningEnergy || 0,
+      dreamStatus: existing.dreamStatus || null,
+      dreamDescription: existing.dreamDescription || '',
+      nightWakeUps: existing.nightWakeUps || null
     }
   }
 })
