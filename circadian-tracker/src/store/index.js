@@ -139,7 +139,7 @@ export const useThemeStore = defineStore('theme', () => {
 })
 
 export const useSettingsStore = defineStore('settings', () => {
-  const settings = ref({
+  const DEFAULT_SETTINGS = {
     bedtimeReminder: {
       enabled: true,
       time: '23:00'
@@ -157,23 +157,61 @@ export const useSettingsStore = defineStore('settings', () => {
       time: '22:30'
     },
     autoStart: true
-  })
+  }
 
-  function loadSettings() {
-    if (window.electronAPI) {
-      const saved = window.electronAPI.getSettings()
-      if (saved) {
-        settings.value = { ...settings.value, ...saved }
+  const settings = ref(JSON.parse(JSON.stringify(DEFAULT_SETTINGS)))
+
+  function deepMerge(target, source) {
+    const result = JSON.parse(JSON.stringify(target))
+    for (const key of Object.keys(source)) {
+      if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
+        result[key] = deepMerge(result[key] || {}, source[key])
+      } else {
+        result[key] = source[key]
+      }
+    }
+    return result
+  }
+
+  async function loadSettings() {
+    if (window.electronAPI && typeof window.electronAPI.getSettings === 'function') {
+      try {
+        const saved = await window.electronAPI.getSettings()
+        if (saved && typeof saved === 'object') {
+          settings.value = deepMerge(DEFAULT_SETTINGS, saved)
+        }
+      } catch (err) {
+        console.error('Failed to load settings:', err)
       }
     }
   }
 
-  function saveSettings(newSettings) {
-    settings.value = { ...settings.value, ...newSettings }
-    if (window.electronAPI) {
-      window.electronAPI.setSettings(settings.value)
+  async function saveSettings(newSettings) {
+    const merged = deepMerge(settings.value, newSettings)
+    if (window.electronAPI && typeof window.electronAPI.setSettings === 'function') {
+      try {
+        const result = await window.electronAPI.setSettings(merged)
+        if (result && result.success) {
+          settings.value = deepMerge(DEFAULT_SETTINGS, result.data || merged)
+          return { success: true }
+        } else {
+          return { success: false, message: result?.message || '保存失败' }
+        }
+      } catch (err) {
+        console.error('Failed to save settings:', err)
+        return { success: false, message: err.message || '保存失败' }
+      }
     }
+    settings.value = merged
+    return { success: true }
   }
 
-  return { settings, loadSettings, saveSettings }
+  async function testReminder(type) {
+    if (window.electronAPI && typeof window.electronAPI.testReminder === 'function') {
+      return await window.electronAPI.testReminder(type)
+    }
+    return { success: false, message: 'Electron API 不可用' }
+  }
+
+  return { settings, loadSettings, saveSettings, testReminder }
 })

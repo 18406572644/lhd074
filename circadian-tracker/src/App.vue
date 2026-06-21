@@ -94,10 +94,10 @@ function minimize() { window.electronAPI?.minimizeWindow() }
 function maximize() { window.electronAPI?.maximizeWindow() }
 function close() { window.electronAPI?.closeWindow() }
 
-onMounted(() => {
+onMounted(async () => {
   themeStore.initTheme()
   scheduleStore.loadRecords()
-  settingsStore.loadSettings()
+  await settingsStore.loadSettings()
 
   if (window.electronAPI) {
     window.electronAPI.onNavigateTo((route) => {
