@@ -31,7 +31,7 @@
       <div class="ct-card chart-card">
         <div class="ct-title">
           <el-icon><TrendCharts /></el-icon>
-          7天作息波动
+          <span>作息波动趋势</span>
           <el-radio-group v-model="chartRange" size="small" style="margin-left:auto">
             <el-radio-button value="7">7天</el-radio-button>
             <el-radio-button value="30">30天</el-radio-button>
@@ -45,6 +45,31 @@
           睡眠结构分布
         </div>
         <div class="chart-container" ref="pieChartRef"></div>
+      </div>
+    </div>
+
+    <div class="charts-row">
+      <div class="ct-card chart-card">
+        <div class="ct-title">
+          <el-icon><Coffee /></el-icon>
+          <span>咖啡因摄入趋势</span>
+          <el-radio-group v-model="chartRange" size="small" style="margin-left:auto">
+            <el-radio-button value="7">7天</el-radio-button>
+            <el-radio-button value="30">30天</el-radio-button>
+          </el-radio-group>
+        </div>
+        <div class="chart-container" ref="caffeineChartRef"></div>
+      </div>
+      <div class="ct-card chart-card">
+        <div class="ct-title">
+          <el-icon><View /></el-icon>
+          <span>用眼时长趋势</span>
+          <el-radio-group v-model="chartRange" size="small" style="margin-left:auto">
+            <el-radio-button value="7">7天</el-radio-button>
+            <el-radio-button value="30">30天</el-radio-button>
+          </el-radio-group>
+        </div>
+        <div class="chart-container" ref="screenChartRef"></div>
       </div>
     </div>
 
@@ -121,21 +146,29 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { Download } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import * as echarts from 'echarts'
 import { useScheduleStore } from '@/store'
+import { useThemeStore } from '@/store'
 
 const store = useScheduleStore()
+const themeStore = useThemeStore()
 const chartRange = ref('7')
+
 const trendChartRef = ref(null)
 const pieChartRef = ref(null)
+const caffeineChartRef = ref(null)
+const screenChartRef = ref(null)
+const heatmapChartRef = ref(null)
+
 let trendChart = null
 let pieChart = null
-
-const heatmapChartRef = ref(null)
+let caffeineChart = null
+let screenChart = null
 let heatmapChart = null
+
 const currentYear = dayjs().year()
 const heatmapYear = ref(currentYear)
 const heatmapYearOptions = [currentYear, currentYear - 1]
@@ -197,11 +230,15 @@ const healthAdvices = computed(() => {
   } else if (sleepH >= 7 && sleepH <= 9) {
     advices.push({ type: 'good', icon: 'CircleCheckFilled', text: '睡眠时长在健康范围内(7-9小时)，非常棒！' })
   }
-  if ((r.caffeineMg || 0) > 200) {
-    advices.push({ type: 'warn', icon: 'WarningFilled', text: '咖啡因摄入偏高，建议控制在200mg以内，避免下午2点后摄入。' })
+  if ((r.caffeineMg || 0) > store.goals.maxCaffeineMg) {
+    advices.push({ type: 'warn', icon: 'WarningFilled', text: `咖啡因摄入(${r.caffeineMg}mg)超过目标上限(${store.goals.maxCaffeineMg}mg)，建议减少。` })
+  } else if ((r.caffeineMg || 0) > 0) {
+    advices.push({ type: 'info', icon: 'InfoFilled', text: `咖啡因摄入${r.caffeineMg}mg，控制合理，避免下午2点后摄入。` })
   }
-  if ((r.screenMin || 0) > 480) {
-    advices.push({ type: 'warn', icon: 'WarningFilled', text: '用眼时间过长，建议每40分钟休息5分钟，遵循20-20-20法则。' })
+  if ((r.screenMin || 0) > store.goals.maxScreenMin) {
+    advices.push({ type: 'warn', icon: 'WarningFilled', text: `用眼时间(${r.screenMin}min)超过目标上限，建议每40分钟休息5分钟。` })
+  } else if ((r.screenMin || 0) > 0) {
+    advices.push({ type: 'info', icon: 'InfoFilled', text: `今日用眼${r.screenMin}分钟，注意遵循20-20-20护眼法则。` })
   }
   if (r.napMin > 30) {
     advices.push({ type: 'info', icon: 'InfoFilled', text: '日间小憩超过30分钟可能影响夜间睡眠质量，建议控制在20分钟内。' })
@@ -246,72 +283,6 @@ const goalProgress = computed(() => {
   ]
 })
 
-function renderTrendChart() {
-  if (!trendChartRef.value) return
-  if (!trendChart) {
-    trendChart = echarts.init(trendChartRef.value)
-  }
-  const days = chartRange.value === '7' ? store.getLast7Days() : store.getLast30Days()
-  const dates = days.map(r => r.date.slice(5))
-  const bedtimes = days.map(r => {
-    const [h, m] = r.bedtime.split(':').map(Number)
-    return h + m / 60
-  })
-  const wakeTimes = days.map(r => {
-    const [h, m] = r.wakeTime.split(':').map(Number)
-    return h + m / 60
-  })
-  const scores = days.map(r => store.calcSleepScore(r))
-
-  trendChart.setOption({
-    tooltip: { trigger: 'axis' },
-    legend: { data: ['入睡时间', '起床时间', '睡眠评分'], textStyle: { color: '#7f8c9b' } },
-    grid: { left: 40, right: 30, bottom: 30, top: 40 },
-    xAxis: { type: 'category', data: dates, axisLabel: { color: '#7f8c9b' } },
-    yAxis: [
-      { type: 'value', name: '时刻(h)', min: 0, max: 24, axisLabel: { color: '#7f8c9b' } },
-      { type: 'value', name: '评分', min: 0, max: 100, axisLabel: { color: '#7f8c9b' } }
-    ],
-    series: [
-      { name: '入睡时间', type: 'line', data: bedtimes, smooth: true, lineStyle: { color: '#7eb8d8', width: 2 }, itemStyle: { color: '#7eb8d8' } },
-      { name: '起床时间', type: 'line', data: wakeTimes, smooth: true, lineStyle: { color: '#67c28a', width: 2 }, itemStyle: { color: '#67c28a' } },
-      { name: '睡眠评分', type: 'line', yAxisIndex: 1, data: scores, smooth: true, lineStyle: { color: '#e6a23c', width: 2, type: 'dashed' }, itemStyle: { color: '#e6a23c' } }
-    ]
-  })
-}
-
-function renderPieChart() {
-  if (!pieChartRef.value) return
-  if (!pieChart) {
-    pieChart = echarts.init(pieChartRef.value)
-  }
-  const r = todayRecord.value
-  let deepSleep = 0, lightSleep = 0, awake = 0
-  if (r) {
-    deepSleep = r.deepSleep || 0
-    lightSleep = r.lightSleep || 0
-    const bedtime = dayjs(`${r.date} ${r.bedtime}`)
-    const wakeTime = dayjs(`${r.date} ${r.wakeTime}`)
-    let totalMin = wakeTime.diff(bedtime, 'minute')
-    if (totalMin < 0) totalMin += 1440
-    awake = Math.max(0, totalMin - deepSleep - lightSleep)
-  }
-  pieChart.setOption({
-    tooltip: { trigger: 'item' },
-    legend: { bottom: 10, textStyle: { color: '#7f8c9b' } },
-    series: [{
-      type: 'pie', radius: ['45%', '70%'],
-      itemStyle: { borderRadius: 6, borderColor: '#fff', borderWidth: 2 },
-      label: { show: true, formatter: '{b}: {d}%' },
-      data: [
-        { value: deepSleep, name: '深睡', itemStyle: { color: '#5a9ab8' } },
-        { value: lightSleep, name: '浅睡', itemStyle: { color: '#7eb8d8' } },
-        { value: awake, name: '清醒', itemStyle: { color: '#d0e9f6' } }
-      ]
-    }]
-  })
-}
-
 const yearStats = computed(() => {
   const yearRecords = store.getRecordsByYear(heatmapYear.value)
   const totalDays = yearRecords.length
@@ -339,6 +310,237 @@ const yearStats = computed(() => {
   return { totalDays, avgScore, excellentDays, maxStreak }
 })
 
+const textColor = computed(() => themeStore.isDark ? '#c0ccd8' : '#7f8c9b')
+
+function getRangeDays() {
+  return chartRange.value === '7' ? store.getLast7Days() : store.getLast30Days()
+}
+
+function renderTrendChart() {
+  if (!trendChartRef.value) return
+  if (!trendChart) {
+    trendChart = echarts.init(trendChartRef.value)
+  }
+  const days = getRangeDays()
+  const dates = days.map(r => r.date.slice(5))
+  const bedtimes = days.map(r => {
+    const [h, m] = r.bedtime.split(':').map(Number)
+    let val = h + m / 60
+    return val < 12 ? val + 24 : val
+  })
+  const wakeTimes = days.map(r => {
+    const [h, m] = r.wakeTime.split(':').map(Number)
+    return h + m / 60
+  })
+  const scores = days.map(r => store.calcSleepScore(r))
+
+  trendChart.setOption({
+    tooltip: {
+      trigger: 'axis',
+      formatter: (params) => {
+        let html = `<div style="font-size:12px"><b>${params[0]?.axisValue}</b>`
+        params.forEach(p => {
+          let v = p.value
+          if (p.seriesName === '入睡时间' || p.seriesName === '起床时间') {
+            const h = Math.floor(v) % 24
+            const m = Math.round((v - Math.floor(v)) * 60).toString().padStart(2, '0')
+            v = `${h}:${m}`
+          }
+          html += `<div>${p.marker}${p.seriesName}: ${v}${p.seriesName === '睡眠评分' ? '分' : ''}</div>`
+        })
+        html += '</div>'
+        return html
+      }
+    },
+    legend: { data: ['入睡时间', '起床时间', '睡眠评分'], textStyle: { color: textColor.value } },
+    grid: { left: 50, right: 50, bottom: 30, top: 40 },
+    xAxis: { type: 'category', data: dates, axisLabel: { color: textColor.value } },
+    yAxis: [
+      {
+        type: 'value',
+        name: '时刻',
+        min: 0,
+        max: 36,
+        axisLabel: {
+          color: textColor.value,
+          formatter: (v) => `${Math.floor(v) % 24}:00`
+        }
+      },
+      {
+        type: 'value',
+        name: '评分',
+        min: 0,
+        max: 100,
+        axisLabel: { color: textColor.value }
+      }
+    ],
+    series: [
+      {
+        name: '入睡时间',
+        type: 'line',
+        data: bedtimes,
+        smooth: true,
+        symbol: 'circle',
+        symbolSize: 6,
+        lineStyle: { color: '#7eb8d8', width: 2 },
+        itemStyle: { color: '#7eb8d8' },
+        areaStyle: { color: 'rgba(126,184,216,0.12)' }
+      },
+      {
+        name: '起床时间',
+        type: 'line',
+        data: wakeTimes,
+        smooth: true,
+        symbol: 'circle',
+        symbolSize: 6,
+        lineStyle: { color: '#67c28a', width: 2 },
+        itemStyle: { color: '#67c28a' },
+        areaStyle: { color: 'rgba(103,194,138,0.12)' }
+      },
+      {
+        name: '睡眠评分',
+        type: 'line',
+        yAxisIndex: 1,
+        data: scores,
+        smooth: true,
+        symbol: 'circle',
+        symbolSize: 5,
+        lineStyle: { color: '#e6a23c', width: 2, type: 'dashed' },
+        itemStyle: { color: '#e6a23c' }
+      }
+    ]
+  }, true)
+}
+
+function renderPieChart() {
+  if (!pieChartRef.value) return
+  if (!pieChart) {
+    pieChart = echarts.init(pieChartRef.value)
+  }
+  const r = todayRecord.value
+  let deepSleep = 0, lightSleep = 0, awake = 0
+  if (r) {
+    deepSleep = r.deepSleep || 0
+    lightSleep = r.lightSleep || 0
+    const bedtime = dayjs(`${r.date} ${r.bedtime}`)
+    const wakeTime = dayjs(`${r.date} ${r.wakeTime}`)
+    let totalMin = wakeTime.diff(bedtime, 'minute')
+    if (totalMin < 0) totalMin += 1440
+    awake = Math.max(0, totalMin - deepSleep - lightSleep)
+  }
+  pieChart.setOption({
+    tooltip: {
+      trigger: 'item',
+      formatter: '{b}: {c}分钟 ({d}%)'
+    },
+    legend: { bottom: 10, textStyle: { color: textColor.value } },
+    series: [{
+      type: 'pie',
+      radius: ['45%', '70%'],
+      center: ['50%', '45%'],
+      itemStyle: { borderRadius: 6, borderColor: 'transparent', borderWidth: 2 },
+      label: { show: true, formatter: '{b}\n{d}%', color: textColor.value },
+      data: [
+        { value: deepSleep, name: '深睡', itemStyle: { color: '#5a9ab8' } },
+        { value: lightSleep, name: '浅睡', itemStyle: { color: '#7eb8d8' } },
+        { value: awake, name: '清醒', itemStyle: { color: '#d0e9f6' } }
+      ]
+    }]
+  }, true)
+}
+
+function renderCaffeineChart() {
+  if (!caffeineChartRef.value) return
+  if (!caffeineChart) {
+    caffeineChart = echarts.init(caffeineChartRef.value)
+  }
+  const days = getRangeDays()
+  const dates = days.map(r => r.date.slice(5))
+  const data = days.map(r => r.caffeineMg || 0)
+  const maxVal = Math.max(store.goals.maxCaffeineMg, ...data, 50)
+
+  caffeineChart.setOption({
+    tooltip: {
+      trigger: 'axis',
+      formatter: (params) => {
+        const p = params[0]
+        return `<div><b>${p.axisValue}</b><br/>咖啡因: ${p.value} mg</div>`
+      }
+    },
+    grid: { left: 45, right: 20, bottom: 30, top: 25 },
+    xAxis: { type: 'category', data: dates, axisLabel: { color: textColor.value } },
+    yAxis: {
+      type: 'value',
+      name: 'mg',
+      nameTextStyle: { color: textColor.value },
+      axisLabel: { color: textColor.value },
+      max: maxVal
+    },
+    series: [{
+      type: 'bar',
+      data: data,
+      itemStyle: {
+        borderRadius: [4, 4, 0, 0],
+        color: (params) => params.value > store.goals.maxCaffeineMg ? '#f56c6c' : '#b88265'
+      },
+      markLine: {
+        silent: true,
+        symbol: 'none',
+        lineStyle: { color: '#f56c6c', type: 'dashed', width: 1.5 },
+        label: { color: '#f56c6c', position: 'end', formatter: '上限' },
+        data: [{ yAxis: store.goals.maxCaffeineMg }]
+      }
+    }]
+  }, true)
+}
+
+function renderScreenChart() {
+  if (!screenChartRef.value) return
+  if (!screenChart) {
+    screenChart = echarts.init(screenChartRef.value)
+  }
+  const days = getRangeDays()
+  const dates = days.map(r => r.date.slice(5))
+  const data = days.map(r => r.screenMin || 0)
+  const maxVal = Math.max(store.goals.maxScreenMin, ...data, 100)
+
+  screenChart.setOption({
+    tooltip: {
+      trigger: 'axis',
+      formatter: (params) => {
+        const p = params[0]
+        const h = Math.floor(p.value / 60)
+        const m = p.value % 60
+        return `<div><b>${p.axisValue}</b><br/>用眼: ${h}h ${m}m (${p.value}min)</div>`
+      }
+    },
+    grid: { left: 45, right: 20, bottom: 30, top: 25 },
+    xAxis: { type: 'category', data: dates, axisLabel: { color: textColor.value } },
+    yAxis: {
+      type: 'value',
+      name: '分钟',
+      nameTextStyle: { color: textColor.value },
+      axisLabel: { color: textColor.value },
+      max: maxVal
+    },
+    series: [{
+      type: 'bar',
+      data: data,
+      itemStyle: {
+        borderRadius: [4, 4, 0, 0],
+        color: (params) => params.value > store.goals.maxScreenMin ? '#f56c6c' : '#f59e9e'
+      },
+      markLine: {
+        silent: true,
+        symbol: 'none',
+        lineStyle: { color: '#f56c6c', type: 'dashed', width: 1.5 },
+        label: { color: '#f56c6c', position: 'end', formatter: '上限' },
+        data: [{ yAxis: store.goals.maxScreenMin }]
+      }
+    }]
+  }, true)
+}
+
 function getScoreColor(score) {
   if (score >= 80) return '#2b6cb0'
   if (score >= 60) return '#7eb8d8'
@@ -355,17 +557,10 @@ function renderHeatmapChart() {
   const year = heatmapYear.value
   const yearRecords = store.getRecordsByYear(year)
   const recordMap = {}
-  yearRecords.forEach(r => {
-    recordMap[r.date] = r
-  })
+  yearRecords.forEach(r => { recordMap[r.date] = r })
 
-  const heatmapData = []
+  const heatmapData = yearRecords.map(r => [r.date, store.calcSleepScore(r)])
   const weekdayNames = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
-
-  yearRecords.forEach(r => {
-    const score = store.calcSleepScore(r)
-    heatmapData.push([r.date, score])
-  })
 
   heatmapChart.setOption({
     tooltip: {
@@ -382,6 +577,7 @@ function renderHeatmapChart() {
         if (record) {
           html += `<div>入睡：${record.bedtime}　起床：${record.wakeTime}</div>`
           html += `<div>深睡：${record.deepSleep}min　浅睡：${record.lightSleep}min</div>`
+          html += `<div>咖啡因：${record.caffeineMg || 0}mg　用眼：${record.screenMin || 0}min</div>`
         }
         html += `</div>`
         return html
@@ -400,29 +596,26 @@ function renderHeatmapChart() {
       ]
     },
     calendar: {
-      top: 30,
-      left: 50,
-      right: 30,
+      top: 20,
+      left: 45,
+      right: 25,
       bottom: 10,
       range: year,
-      cellSize: ['auto', 14],
-      splitLine: {
-        show: true,
-        lineStyle: { color: '#dce4ec' }
-      },
+      cellSize: ['auto', 13],
+      splitLine: { show: true, lineStyle: { color: themeStore.isDark ? '#2a3040' : '#eef4f8' } },
       itemStyle: {
         borderWidth: 2,
-        borderColor: '#fff'
+        borderColor: themeStore.isDark ? '#1a1f2e' : '#fff'
       },
       yearLabel: { show: false },
       dayLabel: {
         firstDay: 1,
-        color: '#7f8c9b',
+        color: textColor.value,
         fontSize: 11,
         nameMap: ['日', '一', '二', '三', '四', '五', '六']
       },
       monthLabel: {
-        color: '#7f8c9b',
+        color: textColor.value,
         fontSize: 11,
         nameMap: 'cn'
       }
@@ -432,38 +625,68 @@ function renderHeatmapChart() {
       coordinateSystem: 'calendar',
       data: heatmapData,
       itemStyle: {
-        borderColor: '#fff',
+        borderColor: themeStore.isDark ? '#1a1f2e' : '#fff',
         borderWidth: 2,
         borderRadius: 2
-      },
-      emphasis: {
-        itemStyle: {
-          borderColor: '#333',
-          borderWidth: 1
-        }
       }
     }]
   }, true)
+}
+
+function renderAll() {
+  nextTick(() => {
+    renderTrendChart()
+    renderPieChart()
+    renderCaffeineChart()
+    renderScreenChart()
+    renderHeatmapChart()
+  })
+}
+
+function handleResize() {
+  trendChart?.resize()
+  pieChart?.resize()
+  caffeineChart?.resize()
+  screenChart?.resize()
+  heatmapChart?.resize()
 }
 
 function handleExportPdf() {
   window.dispatchEvent(new CustomEvent('export-pdf'))
 }
 
-watch(chartRange, () => { nextTick(renderTrendChart) })
+watch(chartRange, () => { renderAll() })
 watch(heatmapYear, () => { nextTick(renderHeatmapChart) })
+watch(() => store.records, () => { renderAll() }, { deep: true })
+watch(() => store.goals, () => { renderAll() }, { deep: true })
+watch(() => themeStore.isDark, () => {
+  setTimeout(() => {
+    trendChart?.dispose()
+    pieChart?.dispose()
+    caffeineChart?.dispose()
+    screenChart?.dispose()
+    heatmapChart?.dispose()
+    trendChart = null
+    pieChart = null
+    caffeineChart = null
+    screenChart = null
+    heatmapChart = null
+    renderAll()
+  }, 50)
+})
 
 onMounted(() => {
-  nextTick(() => {
-    renderTrendChart()
-    renderPieChart()
-    renderHeatmapChart()
-  })
-  window.addEventListener('resize', () => {
-    trendChart?.resize()
-    pieChart?.resize()
-    heatmapChart?.resize()
-  })
+  renderAll()
+  window.addEventListener('resize', handleResize)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', handleResize)
+  trendChart?.dispose()
+  pieChart?.dispose()
+  caffeineChart?.dispose()
+  screenChart?.dispose()
+  heatmapChart?.dispose()
 })
 </script>
 
@@ -536,14 +759,21 @@ onMounted(() => {
 
 .charts-row {
   display: grid;
-  grid-template-columns: 2fr 1fr;
+  grid-template-columns: 1fr 1fr;
   gap: 16px;
 
   .chart-card {
     .chart-container {
-      height: 280px;
+      height: 260px;
     }
   }
+}
+
+.ct-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .bottom-row {

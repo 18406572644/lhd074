@@ -26,13 +26,24 @@ export const useScheduleStore = defineStore('schedule', () => {
   }
 
   async function addRecord(record) {
-    const existing = records.value.findIndex(r => r.date === record.date)
+    const normalized = {
+      date: record.date,
+      bedtime: record.bedtime || '23:00',
+      wakeTime: record.wakeTime || '07:00',
+      deepSleep: Number(record.deepSleep) || 0,
+      lightSleep: Number(record.lightSleep) || 0,
+      napMin: Number(record.napMin) || 0,
+      caffeineMg: Number(record.caffeineMg) || 0,
+      screenMin: Number(record.screenMin) || 0,
+      note: record.note || ''
+    }
+    const existing = records.value.findIndex(r => r.date === normalized.date)
     if (existing >= 0) {
-      records.value[existing] = record
-      await db.updateRecord(record)
+      records.value.splice(existing, 1, normalized)
+      await db.updateRecord(normalized)
     } else {
-      records.value.push(record)
-      await db.insertRecord(record)
+      records.value = [...records.value, normalized]
+      await db.insertRecord(normalized)
     }
   }
 
