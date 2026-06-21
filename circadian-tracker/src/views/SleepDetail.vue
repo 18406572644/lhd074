@@ -200,13 +200,13 @@ const activityLabelMap = {
 }
 
 const goals = reactive({
-  targetBedtime: store.goals.targetBedtime,
-  targetWakeTime: store.goals.targetWakeTime,
-  targetSleepHours: store.goals.targetSleepHours,
-  targetDeepRatio: store.goals.targetDeepRatio,
-  maxCaffeineMg: store.goals.maxCaffeineMg,
-  maxScreenMin: store.goals.maxScreenMin
-})
+    targetBedtime: store.goals?.targetBedtime || '23:00',
+    targetWakeTime: store.goals?.targetWakeTime || '07:00',
+    targetSleepHours: store.goals?.targetSleepHours || 8,
+    targetDeepRatio: store.goals?.targetDeepRatio || 0.25,
+    maxCaffeineMg: store.goals?.maxCaffeineMg || 200,
+    maxScreenMin: store.goals?.maxScreenMin || 480
+  })
 
 const last7 = computed(() => store.getLast7Days(filterTag.value))
 const last30 = computed(() => store.getLast30Days(filterTag.value))
@@ -237,25 +237,38 @@ const weekMinScore = computed(() => {
 })
 
 function calcTotalMin(r) {
-  const bedtime = dayjs(`${r.date} ${r.bedtime}`)
-  const wakeTime = dayjs(`${r.date} ${r.wakeTime}`)
-  let total = wakeTime.diff(bedtime, 'minute')
-  if (total < 0) total += 1440
-  return total || 1
-}
+    if (!r || !r.date || !r.bedtime || !r.wakeTime) return 1
+    try {
+      const bedtime = dayjs(`${r.date} ${r.bedtime}`)
+      const wakeTime = dayjs(`${r.date} ${r.wakeTime}`)
+      let total = wakeTime.diff(bedtime, 'minute')
+      if (total < 0) total += 1440
+      return total || 1
+    } catch (e) {
+      return 1
+    }
+  }
 
-function deepPercent(r) {
-  return (r.deepSleep / calcTotalMin(r)) * 100
-}
+  function deepPercent(r) {
+    if (!r || typeof r.deepSleep !== 'number') return 0
+    const total = calcTotalMin(r)
+    return ((r.deepSleep || 0) / total) * 100
+  }
 
-function lightPercent(r) {
-  return (r.lightSleep / calcTotalMin(r)) * 100
-}
+  function lightPercent(r) {
+    if (!r || typeof r.lightSleep !== 'number') return 0
+    const total = calcTotalMin(r)
+    return ((r.lightSleep || 0) / total) * 100
+  }
 
-function awakePercent(r) {
-  const awake = Math.max(0, calcTotalMin(r) - r.deepSleep - r.lightSleep)
-  return (awake / calcTotalMin(r)) * 100
-}
+  function awakePercent(r) {
+    if (!r) return 0
+    const total = calcTotalMin(r)
+    const deep = r.deepSleep || 0
+    const light = r.lightSleep || 0
+    const awake = Math.max(0, total - deep - light)
+    return (awake / total) * 100
+  }
 
 function getScoreClass(score) {
   if (score >= 80) return 'good'
@@ -269,19 +282,30 @@ async function saveGoals() {
 }
 
 function renderSleepChart() {
-  if (!sleepChartRef.value) return
-  if (!sleepChart) sleepChart = echarts.init(sleepChartRef.value)
+    if (!sleepChartRef.value) return
+    if (!sleepChart) sleepChart = echarts.init(sleepChartRef.value)
 
-  const days = last7.value
-  const dates = days.map(r => r.date.slice(5))
-  const bedtimes = days.map(r => {
-    const [h, m] = r.bedtime.split(':').map(Number)
-    return h + m / 60
-  })
-  const wakeTimes = days.map(r => {
-    const [h, m] = r.wakeTime.split(':').map(Number)
-    return h + m / 60
-  })
+    const days = last7.value || []
+    if (days.length === 0) {
+      sleepChart.clear()
+      return
+    }
+
+    const dates = days.map(r => r.date ? r.date.slice(5) : '')
+    const bedtimes = days.map(r => {
+      try {
+        if (!r.bedtime) return 0
+        const [h, m] = r.bedtime.split(':').map(Number)
+        return h + m / 60
+      } catch (e) { return 0 }
+    })
+    const wakeTimes = days.map(r => {
+      try {
+        if (!r.wakeTime) return 0
+        const [h, m] = r.wakeTime.split(':').map(Number)
+        return h + m / 60
+      } catch (e) { return 0 }
+    })
 
   sleepChart.setOption({
     tooltip: { trigger: 'axis' },
@@ -313,11 +337,16 @@ function renderSleepChart() {
 }
 
 function renderFactorChart() {
-  if (!factorChartRef.value) return
-  if (!factorChart) factorChart = echarts.init(factorChartRef.value)
+    if (!factorChartRef.value) return
+    if (!factorChart) factorChart = echarts.init(factorChartRef.value)
 
-  const days = last7.value
-  const dates = days.map(r => r.date.slice(5))
+    const days = last7.value || []
+    if (days.length === 0) {
+      factorChart.clear()
+      return
+    }
+
+    const dates = days.map(r => r.date ? r.date.slice(5) : '')
 
   factorChart.setOption({
     tooltip: { trigger: 'axis' },
@@ -334,15 +363,24 @@ function renderFactorChart() {
 }
 
 function renderMoodScatterChart() {
-  if (!moodScatterRef.value) return
-  if (!moodScatterChart) moodScatterChart = echarts.init(moodScatterRef.value)
+    if (!moodScatterRef.value) return
+    if (!moodScatterChart) moodScatterChart = echarts.init(moodScatterRef.value)
 
-  const days = last30.value.filter(r => r.preSleepMood && moodEmojiMap[r.preSleepMood])
-  const scatterData = days.map(r => [
-    moodEmojiMap[r.preSleepMood].value,
-    store.calcSleepScore(r),
-    r.date
-  ])
+    const days = (last30.value || []).filter(r => r && r.preSleepMood && moodEmojiMap[r.preSleepMood])
+    if (days.length === 0) {
+      moodScatterChart.clear()
+      return
+    }
+
+    const scatterData = days.map(r => {
+      try {
+        return [
+          moodEmojiMap[r.preSleepMood].value,
+          store.calcSleepScore(r),
+          r.date
+        ]
+      } catch (e) { return [0, 0, r.date || ''] }
+    })
 
   const moodCategories = Object.entries(moodEmojiMap).map(([key, val]) => ({
     value: val.value,
@@ -409,24 +447,31 @@ function renderMoodScatterChart() {
 }
 
 function renderActivityBoxplotChart() {
-  if (!activityBoxplotRef.value) return
-  if (!activityBoxplotChart) activityBoxplotChart = echarts.init(activityBoxplotRef.value)
+    if (!activityBoxplotRef.value) return
+    if (!activityBoxplotChart) activityBoxplotChart = echarts.init(activityBoxplotRef.value)
 
-  const days = last30.value
-  const activityScoresMap = {}
+    const days = last30.value || []
+    if (days.length === 0) {
+      activityBoxplotChart.clear()
+      return
+    }
 
-  days.forEach((r, idx) => {
-    if (r.preSleepActivities && r.preSleepActivities.length > 0) {
+    const activityScoresMap = {}
+
+    days.forEach((r, idx) => {
+      if (!r || !r.preSleepActivities || r.preSleepActivities.length === 0) return
       const nextDay = days[idx + 1]
-      const score = nextDay ? store.calcSleepScore(nextDay) : store.calcSleepScore(r)
+      let score = 0
+      try {
+        score = nextDay ? store.calcSleepScore(nextDay) : store.calcSleepScore(r)
+      } catch (e) { score = 0 }
       r.preSleepActivities.forEach(activity => {
         if (!activityScoresMap[activity]) {
           activityScoresMap[activity] = []
         }
         activityScoresMap[activity].push(score)
       })
-    }
-  })
+    })
 
   const activityList = Object.keys(activityScoresMap).filter(a => activityScoresMap[a].length >= 2)
   const boxData = activityList.map(activity => {

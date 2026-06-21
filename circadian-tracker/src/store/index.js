@@ -32,7 +32,7 @@ export const useScheduleStore = defineStore('schedule', () => {
   async function loadRecords() {
     records.value = await db.getAllRecords()
     const savedGoals = await db.getGoals()
-    if (savedGoals) goals.value = { ...goals.value, ...JSON.parse(savedGoals) }
+    if (savedGoals && typeof savedGoals === 'object') goals.value = { ...goals.value, ...savedGoals }
     const savedTags = await db.getTags()
     if (savedTags && savedTags.length > 0) tags.value = savedTags
     mappingTemplates.value = await db.getMappingTemplates()
@@ -73,7 +73,7 @@ export const useScheduleStore = defineStore('schedule', () => {
 
   async function saveGoals(newGoals) {
     goals.value = { ...goals.value, ...newGoals }
-    await db.saveGoals(JSON.stringify(goals.value))
+    await db.saveGoals(goals.value)
   }
 
   async function addTag(tagName) {

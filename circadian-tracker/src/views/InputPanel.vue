@@ -78,17 +78,17 @@
             <el-form-item label="夜间打鼾">
               <el-radio-group v-model="form.snoring" size="large">
                 <el-radio-button :value="null">未记录</el-radio-button>
-                <el-radio-button :value="never">从不</el-radio-button>
-                <el-radio-button :value="occasionally">偶尔</el-radio-button>
-                <el-radio-button :value="frequently">经常</el-radio-button>
+                <el-radio-button value="never">从不</el-radio-button>
+                <el-radio-button value="occasionally">偶尔</el-radio-button>
+                <el-radio-button value="frequently">经常</el-radio-button>
               </el-radio-group>
             </el-form-item>
             <el-form-item label="呼吸暂停">
               <el-radio-group v-model="form.breathingPause" size="large">
                 <el-radio-button :value="null">未记录</el-radio-button>
-                <el-radio-button :value="never">从不</el-radio-button>
-                <el-radio-button :value="occasionally">偶尔</el-radio-button>
-                <el-radio-button :value="frequently">经常</el-radio-button>
+                <el-radio-button value="never">从不</el-radio-button>
+                <el-radio-button value="occasionally">偶尔</el-radio-button>
+                <el-radio-button value="frequently">经常</el-radio-button>
               </el-radio-group>
             </el-form-item>
           </div>

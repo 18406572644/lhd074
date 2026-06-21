@@ -59,8 +59,8 @@ export const db = {
     return safeGet(STORAGE_KEYS.GOALS, null)
   },
 
-  async saveGoals(goalsJson) {
-    safeSet(STORAGE_KEYS.GOALS, goalsJson)
+  async saveGoals(goalsObj) {
+    safeSet(STORAGE_KEYS.GOALS, goalsObj)
     return true
   },
 
