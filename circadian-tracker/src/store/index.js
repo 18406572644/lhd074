@@ -15,12 +15,7 @@ export const useScheduleStore = defineStore('schedule', () => {
     targetSleepHours: 8,
     targetDeepRatio: 0.25,
     maxCaffeineMg: 200,
-    maxScreenMin: 480,
-    smartRecommend: {
-      enabled: false,
-      percentile: 'p50',
-      lastCalibrated: null
-    }
+    maxScreenMin: 480
   })
   const tags = ref([...DEFAULT_TAGS])
 
@@ -71,29 +66,6 @@ export const useScheduleStore = defineStore('schedule', () => {
   async function saveGoals(newGoals) {
     goals.value = { ...goals.value, ...newGoals }
     await db.saveGoals(JSON.stringify(goals.value))
-  }
-
-  function shouldAutoCalibrate() {
-    const sr = goals.value.smartRecommend
-    if (!sr || !sr.enabled) return false
-    if (!sr.lastCalibrated) return true
-    const last = dayjs(sr.lastCalibrated)
-    return dayjs().diff(last, 'day') >= 7
-  }
-
-  async function applySmartRecommendation(recommendation, percentile = 'p50') {
-    const preset = recommendation[percentile]
-    if (!preset) return false
-    goals.value.targetBedtime = preset.targetBedtime
-    goals.value.targetWakeTime = preset.targetWakeTime
-    goals.value.targetSleepHours = preset.targetSleepHours
-    goals.value.smartRecommend = {
-      ...goals.value.smartRecommend,
-      percentile,
-      lastCalibrated: dayjs().format('YYYY-MM-DD')
-    }
-    await db.saveGoals(JSON.stringify(goals.value))
-    return true
   }
 
   async function addTag(tagName) {
@@ -207,7 +179,7 @@ export const useScheduleStore = defineStore('schedule', () => {
     loadRecords, addRecord, deleteRecord, saveGoals, addTag, removeTag,
     addMappingTemplate, removeMappingTemplate, saveMappingTemplatesLocal,
     getRecordsByRange, getRecordsByYear, getLast7Days, getLast30Days, calcSleepScore,
-    searchRecords, shouldAutoCalibrate, applySmartRecommendation
+    searchRecords
   }
 })
 

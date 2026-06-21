@@ -210,63 +210,6 @@
         </div>
 
         <div class="settings-section">
-          <div class="section-header">
-            <div class="section-title">
-              <el-icon><MagicStick /></el-icon>
-              智能目标推荐
-            </div>
-            <el-button
-              v-if="formData.smartRecommend?.enabled"
-              size="small"
-              type="primary"
-              link
-              @click="handleCalibrateNow"
-            >
-              <el-icon><RefreshRight /></el-icon>
-              立即校准
-            </el-button>
-          </div>
-          <el-form-item label="启用推荐">
-            <el-switch
-              v-model="formData.smartRecommend.enabled"
-              style="--el-switch-on-color: var(--ct-primary)"
-            />
-          </el-form-item>
-          <el-form-item
-            v-if="formData.smartRecommend?.enabled"
-            label="推荐策略"
-          >
-            <el-radio-group v-model="formData.smartRecommend.percentile" size="small">
-              <el-radio-button value="p50">P50 适中</el-radio-button>
-              <el-radio-button value="p75">P75 进取</el-radio-button>
-            </el-radio-group>
-          </el-form-item>
-          <el-form-item
-            v-if="formData.smartRecommend?.enabled"
-            label="自动校准"
-          >
-            <div class="calibrate-info">
-              <span class="calibrate-label">每周自动校准目标值</span>
-              <span class="calibrate-date">上次校准：{{ lastCalibratedLabel }}</span>
-            </div>
-          </el-form-item>
-          <div v-if="formData.smartRecommend?.enabled && smartRecPreview?.available" class="smart-rec-preview">
-            <div class="preview-item">
-              <span class="preview-label">推荐入睡</span>
-              <span class="preview-value">{{ smartRecPreview[formData.smartRecommend.percentile || 'p50']?.targetBedtime || '--:--' }}</span>
-            </div>
-            <div class="preview-item">
-              <span class="preview-label">推荐起床</span>
-              <span class="preview-value">{{ smartRecPreview[formData.smartRecommend.percentile || 'p50']?.targetWakeTime || '--:--' }}</span>
-            </div>
-            <div class="preview-item">
-              <span class="preview-label">推荐时长</span>
-              <span class="preview-value">{{ smartRecPreview[formData.smartRecommend.percentile || 'p50']?.targetSleepHours || '--' }}h</span>
-            </div>
-          </div>
-        </div>
-
-        <div class="settings-section">
           <div class="section-title">
             <el-icon><Monitor /></el-icon>
             启动设置
@@ -290,10 +233,8 @@
 
 <script setup>
 import { ref, watch, computed } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { useSettingsStore, useScheduleStore } from '@/store'
-import { calcSmartRecommendation } from '@/utils/prediction'
-import dayjs from 'dayjs'
+import { ElMessage } from 'element-plus'
+import { useSettingsStore } from '@/store'
 
 const props = defineProps({
   modelValue: {
@@ -305,7 +246,6 @@ const props = defineProps({
 const emit = defineEmits(['update:modelValue'])
 
 const settingsStore = useSettingsStore()
-const scheduleStore = useScheduleStore()
 const visible = ref(props.modelValue)
 const saving = ref(false)
 const testing = ref(false)
@@ -333,12 +273,7 @@ const DEFAULT_FORM = () => ({
     enabled: false,
     time: '07:30'
   },
-  autoStart: true,
-  smartRecommend: {
-    enabled: false,
-    percentile: 'p50',
-    lastCalibrated: null
-  }
+  autoStart: true
 })
 
 const formData = ref(DEFAULT_FORM())
@@ -427,11 +362,6 @@ async function handleSave() {
     const result = await settingsStore.saveSettings(formData.value)
     if (result && result.success) {
       originalBackup.value = JSON.parse(JSON.stringify(formData.value))
-      if (formData.value.smartRecommend) {
-        await scheduleStore.saveGoals({
-          smartRecommend: formData.value.smartRecommend
-        })
-      }
       ElMessage.success('设置已保存并生效')
       visible.value = false
     } else {
@@ -459,40 +389,6 @@ async function handleTestReminder(type) {
   } finally {
     testing.value = false
   }
-}
-
-const smartRecPreview = computed(() => {
-  return calcSmartRecommendation(scheduleStore.getLast30Days())
-})
-
-const lastCalibratedLabel = computed(() => {
-  const lc = formData.value.smartRecommend?.lastCalibrated
-  if (!lc) return '从未校准'
-  return dayjs(lc).format('YYYY-MM-DD')
-})
-
-async function handleCalibrateNow() {
-  const rec = smartRecPreview.value
-  if (!rec || !rec.available) {
-    ElMessage.warning('数据不足，无法校准（需至少7天数据）')
-    return
-  }
-  const percentile = formData.value.smartRecommend?.percentile || 'p50'
-  const preset = rec[percentile]
-  try {
-    await ElMessageBox.confirm(
-      `将立即校准目标为：入睡 ${preset.targetBedtime}、起床 ${preset.targetWakeTime}、时长 ${preset.targetSleepHours}h，是否继续？`,
-      '立即校准',
-      { confirmButtonText: '校准', cancelButtonText: '取消', type: 'info' }
-    )
-    const ok = await scheduleStore.applySmartRecommendation(rec, percentile)
-    if (ok) {
-      formData.value.smartRecommend.lastCalibrated = dayjs().format('YYYY-MM-DD')
-      ElMessage.success('目标已校准')
-    } else {
-      ElMessage.error('校准失败')
-    }
-  } catch {}
 }
 </script>
 
@@ -546,48 +442,5 @@ async function handleCalibrateNow() {
 :deep(.el-form-item__label) {
   color: var(--ct-text-secondary);
   font-size: 13px;
-}
-
-.calibrate-info {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-
-  .calibrate-label {
-    font-size: 13px;
-    color: var(--ct-text);
-  }
-
-  .calibrate-date {
-    font-size: 11px;
-    color: var(--ct-text-secondary);
-  }
-}
-
-.smart-rec-preview {
-  display: flex;
-  gap: 16px;
-  padding: 10px 14px;
-  background: var(--ct-primary-lighter);
-  border-radius: 8px;
-  margin-bottom: 12px;
-
-  .preview-item {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 2px;
-
-    .preview-label {
-      font-size: 11px;
-      color: var(--ct-text-secondary);
-    }
-
-    .preview-value {
-      font-size: 15px;
-      font-weight: 700;
-      color: var(--ct-primary-dark);
-    }
-  }
 }
 </style>

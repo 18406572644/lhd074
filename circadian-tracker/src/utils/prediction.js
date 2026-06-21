@@ -318,6 +318,7 @@ export function shouldShowNoonReminder(records) {
   return true
 }
 
+<<<<<<< HEAD
 function percentile(sorted, p) {
   if (sorted.length === 0) return 0
   const idx = (p / 100) * (sorted.length - 1)
@@ -457,6 +458,8 @@ export function calcAchievementPredictionCurve(records, calcSleepScore, goals) {
   }
 }
 
+=======
+>>>>>>> parent of aee01ed (智能目标动态推荐)
 export function getNoonReminderText(records) {
   const sorted = [...records].sort((a, b) => a.date.localeCompare(b.date))
   const recent3 = sorted.slice(-3)
