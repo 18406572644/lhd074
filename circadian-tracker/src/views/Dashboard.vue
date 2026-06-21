@@ -10,7 +10,7 @@
           今日评分 {{ todayScore }} 分
         </el-tag>
         <el-button type="primary" @click="handleExportPdf" :icon="Download" round>
-          导出月度报告
+          导出报告
         </el-button>
       </div>
     </div>

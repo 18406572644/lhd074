@@ -128,20 +128,23 @@
       </main>
     </div>
     <PdfTemplate v-if="reportData" :reportData="reportData" ref="pdfRef" />
+    <ReportExportDialog v-model="showReportDialog" @export="handleDialogExport" />
     <SettingsDialog v-model="showSettings" />
   </div>
 </template>
 
 <script setup>
-import { onMounted, ref, computed, onBeforeUnmount } from 'vue'
+import { onMounted, ref, computed, onBeforeUnmount, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
 import html2canvas from 'html2canvas'
 import { jsPDF } from 'jspdf'
+import Papa from 'papaparse'
 import { useScheduleStore, useThemeStore, useSettingsStore } from '@/store'
-import { generateMonthlyReport } from '@/utils/pdf'
+import { generateMonthlyReport, generateReport } from '@/utils/pdf'
 import PdfTemplate from '@/components/PdfTemplate.vue'
+import ReportExportDialog from '@/components/ReportExportDialog.vue'
 import SettingsDialog from '@/components/SettingsDialog.vue'
 
 const router = useRouter()
@@ -151,6 +154,7 @@ const settingsStore = useSettingsStore()
 const reportData = ref(null)
 const pdfRef = ref(null)
 const showSettings = ref(false)
+const showReportDialog = ref(false)
 
 const searchKeyword = ref('')
 const showSearchResults = ref(false)
@@ -217,49 +221,118 @@ onBeforeUnmount(() => {
 })
 
 async function handleExportPdf() {
-  const report = await generateMonthlyReport(scheduleStore)
-  if (!report) {
-    ElMessage.warning('暂无足够数据生成报告')
-    return
-  }
+  showReportDialog.value = true
+}
+
+async function handleDialogExport({ format, report, start, end }) {
   reportData.value = report
 
-  await new Promise(r => setTimeout(r, 100))
+  await nextTick()
+  await new Promise(r => setTimeout(r, 300))
 
   const el = document.querySelector('.pdf-template')
   if (!el) {
     ElMessage.error('报告模板渲染失败')
+    reportData.value = null
     return
   }
 
   try {
-    const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff' })
-    const imgData = canvas.toDataURL('image/png')
-    const pdf = new jsPDF('p', 'mm', 'a4')
-    const pdfWidth = pdf.internal.pageSize.getWidth()
-    const pdfHeight = (canvas.height * pdfWidth) / canvas.width
-
-    let position = 0
-    const pageHeight = pdf.internal.pageSize.getHeight()
-    let heightLeft = pdfHeight
-
-    pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight)
-    heightLeft -= pageHeight
-
-    while (heightLeft > 0) {
-      position = -(pageHeight - 0.5) * (Math.ceil((pdfHeight - heightLeft) / pageHeight))
-      pdf.addPage()
-      pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight)
-      heightLeft -= pageHeight
+    if (format === 'pdf') {
+      await exportAsPdf(el, report)
+    } else if (format === 'png') {
+      await exportAsPng(el, report)
+    } else if (format === 'csv') {
+      await exportAsCsv(report)
     }
-
-    pdf.save(`作息报告_${report.period.replace(/ /g, '')}.pdf`)
-    ElMessage.success('月度报告已导出')
+    showReportDialog.value = false
     reportData.value = null
-  } catch {
-    ElMessage.error('PDF导出失败')
+  } catch (err) {
+    console.error(err)
+    ElMessage.error('导出失败，请重试')
     reportData.value = null
   }
+}
+
+async function exportAsPdf(el, report) {
+  const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff' })
+  const imgData = canvas.toDataURL('image/png')
+  const pdf = new jsPDF('p', 'mm', 'a4')
+  const pdfWidth = pdf.internal.pageSize.getWidth()
+  const pdfHeight = (canvas.height * pdfWidth) / canvas.width
+
+  let position = 0
+  const pageHeight = pdf.internal.pageSize.getHeight()
+  let heightLeft = pdfHeight
+
+  pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight)
+  heightLeft -= pageHeight
+
+  while (heightLeft > 0) {
+    position = -(pageHeight - 0.5) * (Math.ceil((pdfHeight - heightLeft) / pageHeight))
+    pdf.addPage()
+    pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight)
+    heightLeft -= pageHeight
+  }
+
+  const safePeriod = report.period.replace(/[ ~]/g, '_')
+  pdf.save(`作息报告_${safePeriod}.pdf`)
+  ElMessage.success('PDF 报告已导出')
+}
+
+async function exportAsPng(el, report) {
+  const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff' })
+  const link = document.createElement('a')
+  link.download = `作息报告_${report.period.replace(/[ ~]/g, '_')}.png`
+  link.href = canvas.toDataURL('image/png')
+  link.click()
+  ElMessage.success('PNG 长图已导出')
+}
+
+async function exportAsCsv(report) {
+  const rows = [
+    ['日期', '入睡时间', '起床时间', '深睡(分钟)', '浅睡(分钟)', '小憩(分钟)', '咖啡因(mg)', '用眼(分钟)', '睡眠评分', '标签', '备注']
+  ]
+
+  report.records.forEach((r, i) => {
+    rows.push([
+      r.date,
+      r.bedtime,
+      r.wakeTime,
+      r.deepSleep || 0,
+      r.lightSleep || 0,
+      r.napMin || 0,
+      r.caffeineMg || 0,
+      r.screenMin || 0,
+      report.scores[i],
+      (r.tags || []).join(';'),
+      r.note || ''
+    ])
+  })
+
+  rows.push([])
+  rows.push(['统计汇总'])
+  rows.push(['报告周期', report.period])
+  rows.push(['记录天数', report.totalDays])
+  rows.push(['平均评分', report.avgScore])
+  rows.push(['日均睡眠(小时)', report.avgSleep])
+  rows.push(['日均深睡(分钟)', report.avgDeep])
+  rows.push(['日均浅睡(分钟)', report.avgLight])
+  rows.push(['日均咖啡因(mg)', report.avgCaffeine])
+  rows.push(['日均用眼(分钟)', report.avgScreen])
+  rows.push(['优秀天数(>=80)', report.goodDays])
+  rows.push(['一般天数(60-79)', report.warnDays])
+  rows.push(['较差天数(<60)', report.badDays])
+
+  const csv = Papa.unparse(rows)
+  const BOM = '\uFEFF'
+  const blob = new Blob([BOM + csv], { type: 'text/csv;charset=utf-8' })
+  const link = document.createElement('a')
+  link.href = URL.createObjectURL(blob)
+  link.download = `作息数据_${report.period.replace(/[ ~]/g, '_')}.csv`
+  link.click()
+  URL.revokeObjectURL(link.href)
+  ElMessage.success('CSV 数据已导出')
 }
 </script>
 
