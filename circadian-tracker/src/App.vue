@@ -159,6 +159,7 @@ const searchWrapRef = ref(null)
 const navItems = [
   { path: '/', label: '数据仪表盘', icon: 'DataBoard' },
   { path: '/input', label: '作息录入', icon: 'EditPen' },
+  { path: '/import', label: '数据导入', icon: 'Upload' },
   { path: '/calendar', label: '日历视图', icon: 'Calendar' },
   { path: '/sleep', label: '睡眠详情', icon: 'Moon' }
 ]

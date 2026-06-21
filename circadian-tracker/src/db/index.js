@@ -4,6 +4,7 @@ const DB_PREFIX = 'ct_'
 const RECORDS_KEY = DB_PREFIX + 'records'
 const GOALS_KEY = DB_PREFIX + 'goals'
 const TAGS_KEY = DB_PREFIX + 'tags'
+const MAPPING_TEMPLATES_KEY = DB_PREFIX + 'mapping_templates'
 
 async function safeGet(key) {
   const raw = localStorage.getItem(key)
@@ -62,5 +63,14 @@ export const db = {
 
   async saveTags(tags) {
     await safeSet(TAGS_KEY, tags)
+  },
+
+  async getMappingTemplates() {
+    const templates = await safeGet(MAPPING_TEMPLATES_KEY)
+    return Array.isArray(templates) ? templates : []
+  },
+
+  async saveMappingTemplates(templates) {
+    await safeSet(MAPPING_TEMPLATES_KEY, templates)
   }
 }

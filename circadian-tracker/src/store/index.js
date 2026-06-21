@@ -7,6 +7,7 @@ const DEFAULT_TAGS = ['加班', '熬夜', '出差', '感冒', '经期', '运动'
 
 export const useScheduleStore = defineStore('schedule', () => {
   const records = ref([])
+  const mappingTemplates = ref([])
   const goals = ref({
     targetBedtime: '23:00',
     targetWakeTime: '07:00',
@@ -28,6 +29,7 @@ export const useScheduleStore = defineStore('schedule', () => {
     if (savedGoals) goals.value = { ...goals.value, ...JSON.parse(savedGoals) }
     const savedTags = await db.getTags()
     if (savedTags && savedTags.length > 0) tags.value = savedTags
+    mappingTemplates.value = await db.getMappingTemplates()
   }
 
   async function addRecord(record) {
@@ -75,6 +77,23 @@ export const useScheduleStore = defineStore('schedule', () => {
       return true
     }
     return false
+  }
+
+  async function addMappingTemplate(template) {
+    mappingTemplates.value.push(template)
+    await db.saveMappingTemplates(mappingTemplates.value)
+  }
+
+  async function removeMappingTemplate(id) {
+    const idx = mappingTemplates.value.findIndex(t => t.id === id)
+    if (idx >= 0) {
+      mappingTemplates.value.splice(idx, 1)
+      await db.saveMappingTemplates(mappingTemplates.value)
+    }
+  }
+
+  async function saveMappingTemplatesLocal() {
+    await db.saveMappingTemplates(mappingTemplates.value)
   }
 
   function getRecordsByRange(startDate, endDate, filterTag = null) {
@@ -157,8 +176,9 @@ export const useScheduleStore = defineStore('schedule', () => {
   }
 
   return {
-    records, goals, tags, todayRecord,
+    records, goals, tags, mappingTemplates, todayRecord,
     loadRecords, addRecord, saveGoals, addTag, removeTag,
+    addMappingTemplate, removeMappingTemplate, saveMappingTemplatesLocal,
     getRecordsByRange, getRecordsByYear, getLast7Days, getLast30Days, calcSleepScore,
     searchRecords
   }
