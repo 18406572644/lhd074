@@ -1,0 +1,5 @@
+export { PredictorBase } from './PredictorBase'
+export { LinearRegressionPredictor } from './LinearRegressionPredictor'
+export { MovingAveragePredictor } from './MovingAveragePredictor'
+export { HoltWintersPredictor } from './HoltWintersPredictor'
+export { PredictorFactory, registerPredictor, STRATEGY_REGISTRY } from './PredictorFactory'

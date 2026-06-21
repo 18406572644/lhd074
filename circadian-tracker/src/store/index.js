@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import dayjs from 'dayjs'
 import { db } from '@/db'
+import { SleepScorer } from '@/utils/scorers'
 
 const DEFAULT_TAGS = ['加班', '熬夜', '出差', '感冒', '经期', '运动', '饮酒', '压力大']
 
@@ -165,35 +166,18 @@ export const useScheduleStore = defineStore('schedule', () => {
     return getRecordsByRange(start, end, filterTag)
   }
 
+  const scorer = computed(() => {
+    return new SleepScorer({}, {
+      targetSleepHours: goals.value.targetSleepHours,
+      targetBedtime: goals.value.targetBedtime,
+      targetDeepRatio: goals.value.targetDeepRatio,
+      maxCaffeineMg: goals.value.maxCaffeineMg,
+      maxScreenMin: goals.value.maxScreenMin
+    })
+  })
+
   function calcSleepScore(record) {
-    if (!record) return 0
-    let score = 0
-
-    const bedtime = dayjs(`${record.date} ${record.bedtime}`)
-    const wakeTime = dayjs(`${record.date} ${record.wakeTime}`)
-    let sleepHours = wakeTime.diff(bedtime, 'minute') / 60
-    if (sleepHours < 0) sleepHours += 24
-
-    const targetHours = goals.value.targetSleepHours
-    const durationScore = Math.max(0, 30 - Math.abs(sleepHours - targetHours) * 6)
-    score += durationScore
-
-    const targetBedtime = dayjs(`${record.date} ${goals.value.targetBedtime}`)
-    const bedtimeDiff = Math.abs(bedtime.diff(targetBedtime, 'minute'))
-    const bedtimeScore = Math.max(0, 20 - bedtimeDiff * 0.2)
-    score += bedtimeScore
-
-    const deepRatio = record.deepSleep / (sleepHours * 60 || 1)
-    const deepScore = Math.max(0, 20 - Math.abs(deepRatio - goals.value.targetDeepRatio) * 80)
-    score += deepScore
-
-    const caffeinePenalty = Math.min(10, (record.caffeineMg || 0) / goals.value.maxCaffeineMg * 10)
-    score += (15 - caffeinePenalty)
-
-    const screenPenalty = Math.min(10, (record.screenMin || 0) / goals.value.maxScreenMin * 10)
-    score += (15 - screenPenalty)
-
-    return Math.round(Math.min(100, Math.max(0, score)))
+    return scorer.value.score(record)
   }
 
   function searchRecords(keyword) {
@@ -219,7 +203,7 @@ export const useScheduleStore = defineStore('schedule', () => {
   }
 
   return {
-    records, goals, tags, mappingTemplates, todayRecord,
+    records, goals, tags, mappingTemplates, todayRecord, scorer,
     loadRecords, addRecord, deleteRecord, saveGoals, addTag, removeTag,
     addMappingTemplate, removeMappingTemplate, saveMappingTemplatesLocal,
     getRecordsByRange, getRecordsByYear, getLast7Days, getLast30Days, calcSleepScore,

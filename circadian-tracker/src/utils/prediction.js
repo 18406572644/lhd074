@@ -1,4 +1,9 @@
 import dayjs from 'dayjs'
+import { PredictorFactory } from './predictors'
+import { LinearRegressionPredictor } from './predictors/LinearRegressionPredictor'
+import { MovingAveragePredictor } from './predictors/MovingAveragePredictor'
+import { HoltWintersPredictor } from './predictors/HoltWintersPredictor'
+import { SleepScorer } from './scorers/SleepScorer'
 
 function timeToMinutes(timeStr) {
   const [h, m] = timeStr.split(':').map(Number)
@@ -15,98 +20,137 @@ function minutesToTime(minutes) {
   return `${h.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`
 }
 
-function linearRegression(points) {
-  const n = points.length
-  if (n < 2) return { slope: 0, intercept: 0 }
-  let sumX = 0, sumY = 0, sumXY = 0, sumXX = 0
-  for (let i = 0; i < n; i++) {
-    sumX += points[i].x
-    sumY += points[i].y
-    sumXY += points[i].x * points[i].y
-    sumXX += points[i].x * points[i].x
-  }
-  const denom = n * sumXX - sumX * sumX
-  if (Math.abs(denom) < 1e-10) return { slope: 0, intercept: sumY / n }
-  const slope = (n * sumXY - sumX * sumY) / denom
-  const intercept = (sumY - slope * sumX) / n
-  return { slope, intercept }
-}
-
-function movingAverage(values, window) {
-  if (values.length < window) return values.length > 0 ? [values.reduce((a, b) => a + b, 0) / values.length] : []
-  const result = []
-  for (let i = window - 1; i < values.length; i++) {
-    let sum = 0
-    for (let j = i - window + 1; j <= i; j++) sum += values[j]
-    result.push(sum / window)
-  }
-  return result
-}
-
-export function predictBedtime(records, targetDayOffset = 7) {
-  if (records.length < 3) return null
-
+function toPoints(records, extractY) {
   const sorted = [...records].sort((a, b) => a.date.localeCompare(b.date))
-  const points = sorted.map((r, i) => ({
+  return sorted.map((r, i) => ({
     x: i,
-    y: timeToMinutes(r.bedtime),
+    y: extractY(r),
     date: r.date
   }))
+}
 
-  const recent = points.slice(-Math.min(30, points.length))
-  const ma3 = movingAverage(recent.map(p => p.y), Math.min(3, recent.length))
+function blendedPredict(points, targetDayOffset, config = {}) {
+  const recentMax = config.recentMax || 30
+  const lrWeight = config.lrWeight ?? 0.6
+  const maWeight = config.maWeight ?? 0.4
+  const maWindow = config.maWindow || 3
+  const strategy = config.strategy || 'auto'
 
-  const { slope, intercept } = linearRegression(recent)
-  const lastIdx = recent.length - 1
-  const predictedMinutes = slope * (lastIdx + targetDayOffset) + intercept
+  const recent = points.slice(-Math.min(recentMax, points.length))
+  if (recent.length < 2) return null
 
-  const maPredicted = ma3.length > 0
-    ? ma3[ma3.length - 1] + slope * targetDayOffset
-    : predictedMinutes
+  let lrPredictor, maPredictor, hwPredictor
 
-  const blended = predictedMinutes * 0.6 + maPredicted * 0.4
+  if (strategy === 'auto') {
+    lrPredictor = new LinearRegressionPredictor()
+    maPredictor = new MovingAveragePredictor(maWindow)
+    hwPredictor = recent.length >= 14 ? new HoltWintersPredictor() : null
+  } else if (strategy === 'linear-regression') {
+    lrPredictor = new LinearRegressionPredictor()
+  } else if (strategy === 'moving-average') {
+    maPredictor = new MovingAveragePredictor(maWindow)
+  } else if (strategy === 'holt-winters') {
+    hwPredictor = new HoltWintersPredictor()
+  } else if (strategy === 'blended') {
+    lrPredictor = new LinearRegressionPredictor()
+    maPredictor = new MovingAveragePredictor(maWindow)
+    hwPredictor = recent.length >= 14 ? new HoltWintersPredictor() : null
+  }
 
-  const currentAvg = recent.reduce((s, p) => s + p.y, 0) / recent.length
-  const trendMinutes = blended - currentAvg
+  if (hwPredictor && recent.length >= 14) {
+    const hwModel = hwPredictor.train(recent)
+    const hwResult = hwPredictor.predict(hwModel, targetDayOffset)
+    const lrModel = lrPredictor ? lrPredictor.train(recent) : new LinearRegressionPredictor().train(recent)
+    const maModel = maPredictor ? maPredictor.train(recent) : new MovingAveragePredictor(maWindow).train(recent)
+
+    const hwPred = hwResult.predictions[0]?.value ?? 0
+    const lrResult = lrPredictor
+      ? lrPredictor.predict(lrModel, targetDayOffset)
+      : new LinearRegressionPredictor().predict(lrModel, targetDayOffset)
+    const maResult = maPredictor
+      ? maPredictor.predict(maModel, targetDayOffset)
+      : new MovingAveragePredictor(maWindow).predict(maModel, targetDayOffset)
+
+    const lrPred = lrResult.predictions[0]?.value ?? 0
+    const maPred = maResult.predictions[0]?.value ?? 0
+
+    const blended = hwPred * 0.4 + lrPred * (lrWeight * 0.6) + maPred * (maWeight * 0.6)
+    const slope = lrModel.slope
+
+    return { predictedValue: blended, slope, currentAvg: lrModel.currentAvg, strategy: 'holt-winters-blended' }
+  }
+
+  if (lrPredictor && maPredictor) {
+    const lrModel = lrPredictor.train(recent)
+    const lrResult = lrPredictor.predict(lrModel, targetDayOffset)
+    const maModel = maPredictor.train(recent)
+    const maResult = maPredictor.predict(maModel, targetDayOffset)
+
+    const lrPred = lrResult.predictions[0]?.value ?? 0
+    const maPred = maResult.predictions[0]?.value ?? 0
+
+    const blended = lrPred * lrWeight + maPred * maWeight
+    const slope = lrModel.slope
+
+    return { predictedValue: blended, slope, currentAvg: lrModel.currentAvg, strategy: 'lr-ma-blended' }
+  }
+
+  if (lrPredictor) {
+    const lrModel = lrPredictor.train(recent)
+    const lrResult = lrPredictor.predict(lrModel, targetDayOffset)
+    const lrPred = lrResult.predictions[0]?.value ?? 0
+
+    return { predictedValue: lrPred, slope: lrModel.slope, currentAvg: lrModel.currentAvg, strategy: 'linear-regression' }
+  }
+
+  if (maPredictor) {
+    const maModel = maPredictor.train(recent)
+    const maResult = maPredictor.predict(maModel, targetDayOffset)
+    const maPred = maResult.predictions[0]?.value ?? 0
+
+    return { predictedValue: maPred, slope: maModel.slope, currentAvg: maModel.currentAvg, strategy: 'moving-average' }
+  }
+
+  return null
+}
+
+export function predictBedtime(records, targetDayOffset = 7, config = {}) {
+  if (records.length < 3) return null
+
+  const points = toPoints(records, r => timeToMinutes(r.bedtime))
+  const result = blendedPredict(points, targetDayOffset, config)
+  if (!result) return null
+
+  const trendMinutes = Math.round(result.predictedValue - result.currentAvg)
 
   return {
-    predictedTime: minutesToTime(Math.round(blended)),
-    trendMinutes: Math.round(trendMinutes),
+    predictedTime: minutesToTime(Math.round(result.predictedValue)),
+    trendMinutes,
     trendDirection: trendMinutes > 15 ? 'later' : trendMinutes < -15 ? 'earlier' : 'stable',
-    currentAvgTime: minutesToTime(Math.round(currentAvg)),
-    slope: slope
+    currentAvgTime: minutesToTime(Math.round(result.currentAvg)),
+    slope: result.slope
   }
 }
 
-export function predictScore(records, calcSleepScore, targetDayOffset = 7) {
+export function predictScore(records, calcSleepScore, targetDayOffset = 7, config = {}) {
   if (records.length < 3) return null
 
-  const sorted = [...records].sort((a, b) => a.date.localeCompare(b.date))
-  const points = sorted.map((r, i) => ({
-    x: i,
-    y: calcSleepScore(r)
-  }))
+  const scoreFn = typeof calcSleepScore === 'function'
+    ? calcSleepScore
+    : (r) => calcSleepScore.score(r)
 
-  const recent = points.slice(-Math.min(30, points.length))
-  const { slope, intercept } = linearRegression(recent)
-  const lastIdx = recent.length - 1
-  const predicted = slope * (lastIdx + targetDayOffset) + intercept
+  const points = toPoints(records, scoreFn)
+  const result = blendedPredict(points, targetDayOffset, config)
+  if (!result) return null
 
-  const ma3 = movingAverage(recent.map(p => p.y), Math.min(3, recent.length))
-  const maPredicted = ma3.length > 0
-    ? ma3[ma3.length - 1] + slope * targetDayOffset
-    : predicted
-
-  const blended = predicted * 0.6 + maPredicted * 0.4
-  const clamped = Math.round(Math.min(100, Math.max(0, blended)))
-
-  const currentAvg = recent.reduce((s, p) => s + p.y, 0) / recent.length
+  const clamped = Math.round(Math.min(100, Math.max(0, result.predictedValue)))
+  const slope = result.slope
 
   return {
     predictedScore: clamped,
     trendDirection: slope < -1 ? 'declining' : slope > 1 ? 'improving' : 'stable',
-    currentAvgScore: Math.round(currentAvg),
-    slope: slope
+    currentAvgScore: Math.round(result.currentAvg),
+    slope
   }
 }
 
@@ -166,7 +210,7 @@ export function detectConsecutiveLateShift(records, threshold = 3) {
   }
 }
 
-export function generatePredictionInsights(records, calcSleepScore, goals) {
+export function generatePredictionInsights(records, calcSleepScore, goals, predictionConfig = {}) {
   const insights = []
   const hasEnoughData = records.length >= 5
 
@@ -180,8 +224,8 @@ export function generatePredictionInsights(records, calcSleepScore, goals) {
     return { insights, bedtimePrediction: null, scorePrediction: null, weeklyPatterns: [], lateShift: { detected: false, count: 0 } }
   }
 
-  const bedtimePrediction = predictBedtime(records)
-  const scorePrediction = predictScore(records, calcSleepScore)
+  const bedtimePrediction = predictBedtime(records, 7, predictionConfig)
+  const scorePrediction = predictScore(records, calcSleepScore, 7, predictionConfig)
   const weeklyPatterns = detectWeeklyPatterns(records)
   const lateShift = detectConsecutiveLateShift(records)
 
@@ -352,6 +396,10 @@ export function calcSmartRecommendation(records) {
 export function calcAchievementPredictionCurve(records, calcSleepScore, goals) {
   if (records.length < 7) return null
 
+  const scoreFn = typeof calcSleepScore === 'function'
+    ? calcSleepScore
+    : (r) => calcSleepScore.score(r)
+
   const sorted = [...records].sort((a, b) => a.date.localeCompare(b.date))
   const recent = sorted.slice(-30)
 
@@ -378,29 +426,26 @@ export function calcAchievementPredictionCurve(records, calcSleepScore, goals) {
     return {
       date: r.date,
       achievement: Math.round(totalAch),
-      score: calcSleepScore(r)
+      score: scoreFn(r)
     }
   })
 
   const points = dailyAchievement.map((d, i) => ({ x: i, y: d.achievement }))
-  const { slope, intercept } = linearRegression(points)
+  const predictor = PredictorFactory.autoSelect(points.length)
+  const model = predictor.train(points)
+  const result = predictor.predict(model, 7)
 
-  const futureDays = 7
-  const lastIdx = points.length - 1
-  const predictions = []
-  for (let d = 1; d <= futureDays; d++) {
-    const futureIdx = lastIdx + d
-    const predicted = slope * futureIdx + intercept
-    predictions.push({
-      dayOffset: d,
-      achievement: Math.round(Math.min(100, Math.max(0, predicted)))
-    })
-  }
+  const predictions = result.predictions.map(p => ({
+    dayOffset: p.dayOffset,
+    achievement: Math.round(Math.min(100, Math.max(0, p.value)))
+  }))
 
   const recent7 = dailyAchievement.slice(-7)
   const avg7 = recent7.length > 0 ? Math.round(recent7.reduce((s, d) => s + d.achievement, 0) / recent7.length) : 0
   const recent3 = dailyAchievement.slice(-3)
   const avg3 = recent3.length > 0 ? Math.round(recent3.reduce((s, d) => s + d.achievement, 0) / recent3.length) : 0
+
+  const slope = model.slope ?? model.trend ?? 0
 
   return {
     history: dailyAchievement,
@@ -421,3 +466,5 @@ export function getNoonReminderText(records) {
   const suggested = Math.round(avgBedtime - 30)
   return `检测到连续晚睡趋势，今晚建议 ${minutesToTime(suggested)} 前入睡`
 }
+
+export { PredictorFactory, LinearRegressionPredictor, MovingAveragePredictor, HoltWintersPredictor, SleepScorer }
