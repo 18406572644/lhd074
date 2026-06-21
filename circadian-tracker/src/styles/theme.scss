@@ -1,0 +1,156 @@
+$primary: #7eb8d8;
+$primary-light: #a8d4ec;
+$primary-lighter: #d0e9f6;
+$primary-dark: #5a9ab8;
+$bg-light: #f0f5fa;
+$bg-dark: #1a1f2e;
+$surface-light: #ffffff;
+$surface-dark: #242938;
+$text-light: #2c3e50;
+$text-dark: #e0e6ed;
+$text-secondary-light: #7f8c9b;
+$text-secondary-dark: #8899aa;
+$border-light: #dce4ec;
+$border-dark: #3a4050;
+$success: #67c28a;
+$warning: #e6a23c;
+$danger: #f56c6c;
+$info: #909399;
+$radius: 12px;
+$shadow-light: 0 2px 12px rgba(126, 184, 216, 0.12);
+$shadow-dark: 0 2px 12px rgba(0, 0, 0, 0.3);
+
+:root {
+  --ct-primary: #{$primary};
+  --ct-primary-light: #{$primary-light};
+  --ct-primary-lighter: #{$primary-lighter};
+  --ct-primary-dark: #{$primary-dark};
+  --ct-bg: #{$bg-light};
+  --ct-surface: #{$surface-light};
+  --ct-text: #{$text-light};
+  --ct-text-secondary: #{$text-secondary-light};
+  --ct-border: #{$border-light};
+  --ct-shadow: #{$shadow-light};
+  --ct-success: #{$success};
+  --ct-warning: #{$warning};
+  --ct-danger: #{$danger};
+  --ct-radius: #{$radius};
+}
+
+html.dark {
+  --ct-primary: #{$primary-light};
+  --ct-primary-light: #{$primary};
+  --ct-primary-lighter: #4a7a94;
+  --ct-primary-dark: #{$primary-lighter};
+  --ct-bg: #{$bg-dark};
+  --ct-surface: #{$surface-dark};
+  --ct-text: #{$text-dark};
+  --ct-text-secondary: #{$text-secondary-dark};
+  --ct-border: #{$border-dark};
+  --ct-shadow: #{$shadow-dark};
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  background: var(--ct-bg);
+  color: var(--ct-text);
+  overflow: hidden;
+  user-select: none;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--ct-primary-light);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.ct-card {
+  background: var(--ct-surface);
+  border-radius: var(--ct-radius);
+  box-shadow: var(--ct-shadow);
+  border: 1px solid var(--ct-border);
+  padding: 20px;
+  transition: all 0.3s ease;
+}
+
+.ct-card:hover {
+  box-shadow: 0 4px 20px rgba(126, 184, 216, 0.2);
+}
+
+.ct-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ct-text);
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  .el-icon {
+    color: var(--ct-primary);
+    font-size: 18px;
+  }
+}
+
+.ct-stat {
+  text-align: center;
+  padding: 16px;
+
+  .ct-stat-value {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--ct-primary);
+    line-height: 1.2;
+  }
+
+  .ct-stat-label {
+    font-size: 12px;
+    color: var(--ct-text-secondary);
+    margin-top: 6px;
+  }
+}
+
+.ct-badge-good {
+  color: #{$success};
+  background: rgba(103, 194, 138, 0.12);
+  padding: 2px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.ct-badge-warn {
+  color: #{$warning};
+  background: rgba(230, 162, 60, 0.12);
+  padding: 2px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.ct-badge-bad {
+  color: #{$danger};
+  background: rgba(245, 108, 108, 0.12);
+  padding: 2px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.fade-enter-active, .fade-leave-active {
+  transition: opacity 0.25s ease;
+}
+.fade-enter-from, .fade-leave-to {
+  opacity: 0;
+}
