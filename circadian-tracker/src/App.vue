@@ -130,6 +130,7 @@
     <PdfTemplate v-if="reportData" :reportData="reportData" ref="pdfRef" />
     <ReportExportDialog v-model="showReportDialog" @export="handleDialogExport" />
     <SettingsDialog v-model="showSettings" />
+    <MorningEntryDialog v-model="showMorningDialog" :initialData="todayMorningData" @saved="handleMorningSaved" />
   </div>
 </template>
 
@@ -146,6 +147,7 @@ import { generateMonthlyReport, generateReport } from '@/utils/pdf'
 import PdfTemplate from '@/components/PdfTemplate.vue'
 import ReportExportDialog from '@/components/ReportExportDialog.vue'
 import SettingsDialog from '@/components/SettingsDialog.vue'
+import MorningEntryDialog from '@/components/MorningEntryDialog.vue'
 
 const router = useRouter()
 const scheduleStore = useScheduleStore()
@@ -155,6 +157,40 @@ const reportData = ref(null)
 const pdfRef = ref(null)
 const showSettings = ref(false)
 const showReportDialog = ref(false)
+const showMorningDialog = ref(false)
+
+const todayMorningData = computed(() => {
+  return scheduleStore.todayRecord || null
+})
+
+function handleMorningSaved(data) {
+  console.log('晨间记录已保存:', data)
+}
+
+function checkShouldShowMorningDialog() {
+  if (!settingsStore.settings.morningEntryReminder?.enabled) return false
+
+  const now = new Date()
+  const currentHour = now.getHours()
+  const currentMinute = now.getMinutes()
+  const currentTime = currentHour * 60 + currentMinute
+
+  const reminderTime = settingsStore.settings.morningEntryReminder.time
+  if (!reminderTime) return false
+
+  const [reminderHour, reminderMinute] = reminderTime.split(':').map(Number)
+  const reminderTimeMin = reminderHour * 60 + reminderMinute
+
+  const todayRecord = scheduleStore.todayRecord
+  const alreadyHasMorningData = todayRecord && (
+    todayRecord.morningEnergy ||
+    todayRecord.dreamStatus ||
+    todayRecord.nightWakeUps
+  )
+
+  const timeDiff = currentTime - reminderTimeMin
+  return timeDiff >= 0 && timeDiff <= 180 && !alreadyHasMorningData
+}
 
 const searchKeyword = ref('')
 const showSearchResults = ref(false)
@@ -200,7 +236,7 @@ function close() { window.electronAPI?.closeWindow() }
 
 onMounted(async () => {
   themeStore.initTheme()
-  scheduleStore.loadRecords()
+  await scheduleStore.loadRecords()
   await settingsStore.loadSettings()
 
   if (window.electronAPI) {
@@ -210,10 +246,19 @@ onMounted(async () => {
     window.electronAPI.onExportPdf(() => {
       handleExportPdf()
     })
+    window.electronAPI.onShowMorningDialog(() => {
+      showMorningDialog.value = true
+    })
   }
 
   window.addEventListener('export-pdf', handleExportPdf)
   document.addEventListener('click', handleDocumentClick)
+
+  setTimeout(() => {
+    if (checkShouldShowMorningDialog()) {
+      showMorningDialog.value = true
+    }
+  }, 1000)
 })
 
 onBeforeUnmount(() => {

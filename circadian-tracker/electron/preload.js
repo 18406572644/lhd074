@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   testReminder: (type) => ipcRenderer.invoke('test-reminder', type),
   onNavigateTo: (callback) => ipcRenderer.on('navigate-to', (e, route) => callback(route)),
   onExportPdf: (callback) => ipcRenderer.on('export-pdf', () => callback()),
+  onShowMorningDialog: (callback) => ipcRenderer.on('show-morning-dialog', () => callback()),
   onThemeChange: (callback) => {
     ipcRenderer.on('native-theme-updated', () => callback())
   }

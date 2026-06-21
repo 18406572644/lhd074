@@ -171,6 +171,45 @@
         </div>
 
         <div class="settings-section">
+          <div class="section-header">
+            <div class="section-title">
+              <el-icon><Sunrise /></el-icon>
+              晨间记录弹窗
+            </div>
+            <el-button
+              v-if="formData.morningEntryReminder.enabled"
+              size="small"
+              type="primary"
+              link
+              @click="handleTestReminder('morningEntry')"
+            >
+              <el-icon><Bell /></el-icon>
+              测试
+            </el-button>
+          </div>
+          <el-form-item label="自动弹出" prop="morningEntryReminder.enabled">
+            <el-switch
+              v-model="formData.morningEntryReminder.enabled"
+              style="--el-switch-on-color: var(--ct-primary)"
+            />
+          </el-form-item>
+          <el-form-item
+            v-if="formData.morningEntryReminder.enabled"
+            label="弹窗时间"
+            prop="morningEntryReminder.time"
+          >
+            <el-time-picker
+              v-model="formData.morningEntryReminder.time"
+              format="HH:mm"
+              value-format="HH:mm"
+              placeholder="选择时间"
+              :clearable="false"
+              style="width: 160px"
+            />
+          </el-form-item>
+        </div>
+
+        <div class="settings-section">
           <div class="section-title">
             <el-icon><Monitor /></el-icon>
             启动设置
@@ -230,6 +269,10 @@ const DEFAULT_FORM = () => ({
     enabled: true,
     time: '22:30'
   },
+  morningEntryReminder: {
+    enabled: false,
+    time: '07:30'
+  },
   autoStart: true
 })
 
@@ -254,6 +297,9 @@ const formRules = computed(() => ({
     { validator: validateTimeRequired, trigger: 'change' }
   ],
   'dailyEntryReminder.time': [
+    { validator: validateTimeRequired, trigger: 'change' }
+  ],
+  'morningEntryReminder.time': [
     { validator: validateTimeRequired, trigger: 'change' }
   ]
 }))
@@ -293,6 +339,7 @@ async function validateEnabledFields() {
   check(formData.value.lateNightReminder.enabled, formData.value.lateNightReminder.startTime, '凌晨未休息提醒开始时间')
   check(formData.value.wakeUpReminder.enabled, formData.value.wakeUpReminder.time, '起床打卡提醒时间')
   check(formData.value.dailyEntryReminder.enabled, formData.value.dailyEntryReminder.time, '每日录入提醒时间')
+  check(formData.value.morningEntryReminder.enabled, formData.value.morningEntryReminder.time, '晨间记录弹窗时间')
   return errors
 }
 

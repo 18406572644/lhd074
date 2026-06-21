@@ -22,6 +22,10 @@ const DEFAULT_SETTINGS = {
     enabled: true,
     time: '22:30'
   },
+  morningEntryReminder: {
+    enabled: false,
+    time: '07:30'
+  },
   autoStart: true
 }
 
@@ -74,6 +78,7 @@ function validateSettings(input) {
   checkReminder('lateNightReminder', 'startTime')
   checkReminder('wakeUpReminder', 'time')
   checkReminder('dailyEntryReminder', 'time')
+  checkReminder('morningEntryReminder', 'time')
 
   if (input.autoStart !== undefined && typeof input.autoStart !== 'boolean') {
     errors.push('autoStart 必须是布尔值')
@@ -99,6 +104,7 @@ function mergeSettings(current, input) {
   mergeReminder('lateNightReminder', 'startTime')
   mergeReminder('wakeUpReminder', 'time')
   mergeReminder('dailyEntryReminder', 'time')
+  mergeReminder('morningEntryReminder', 'time')
 
   if (input.autoStart !== undefined) {
     merged.autoStart = Boolean(input.autoStart)
@@ -210,6 +216,25 @@ function checkReminders() {
           body: `已到${settings.dailyEntryReminder.time}，请记得完成今日作息数据录入。`,
           icon: path.join(__dirname, 'icon.png')
         }).show()
+        triggeredReminders.add(key)
+      }
+    }
+  }
+
+  if (settings.morningEntryReminder.enabled) {
+    const t = parseTime(settings.morningEntryReminder.time)
+    if (t.valid) {
+      const key = `morningentry-${todayKey}`
+      if (currentHour === t.hour && currentMinute >= t.minute && currentMinute < t.minute + 5 && !triggeredReminders.has(key)) {
+        new Notification({
+          title: '晨间记录提醒',
+          body: `早安！请完成今日晨间心情记录。`,
+          icon: path.join(__dirname, 'icon.png')
+        }).show()
+        if (mainWindow) {
+          mainWindow.show()
+          mainWindow.webContents.send('show-morning-dialog')
+        }
         triggeredReminders.add(key)
       }
     }
@@ -359,11 +384,16 @@ ipcMain.handle('test-reminder', async (_e, reminderType) => {
     bedtime: { title: '就寝提醒', body: `已到${settings.bedtimeReminder.time}，建议您尽快准备休息。` },
     lateNight: { title: '作息异常提醒', body: `当前已过凌晨，您仍未休息，请注意作息健康！` },
     wakeUp: { title: '起床打卡提醒', body: `已到目标起床时间${settings.wakeUpReminder.time}，新的一天开始啦！记得完成作息打卡哦。` },
-    dailyEntry: { title: '每日录入提醒', body: `已到${settings.dailyEntryReminder.time}，请记得完成今日作息数据录入。` }
+    dailyEntry: { title: '每日录入提醒', body: `已到${settings.dailyEntryReminder.time}，请记得完成今日作息数据录入。` },
+    morningEntry: { title: '晨间记录提醒', body: `早安！请完成今日晨间心情记录。` }
   }
   const n = map[reminderType]
   if (n) {
     new Notification({ title: n.title, body: n.body, icon }).show()
+    if (reminderType === 'morningEntry' && mainWindow) {
+      mainWindow.show()
+      mainWindow.webContents.send('show-morning-dialog')
+    }
     return { success: true }
   }
   return { success: false, message: '未知提醒类型' }

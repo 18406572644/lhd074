@@ -104,6 +104,23 @@
       </div>
     </div>
 
+    <div class="mood-analysis-section">
+      <div class="ct-card">
+        <div class="ct-title">
+          <el-icon><TrendCharts /></el-icon>
+          心情与睡眠评分相关性
+        </div>
+        <div class="chart-box" ref="moodScatterRef"></div>
+      </div>
+      <div class="ct-card">
+        <div class="ct-title">
+          <el-icon><Histogram /></el-icon>
+          睡前活动与次日评分
+        </div>
+        <div class="chart-box" ref="activityBoxplotRef"></div>
+      </div>
+    </div>
+
     <div class="ct-card goal-setting">
       <div class="ct-title">
         <el-icon><Setting /></el-icon>
@@ -155,10 +172,32 @@ import { useScheduleStore } from '@/store'
 const store = useScheduleStore()
 const sleepChartRef = ref(null)
 const factorChartRef = ref(null)
+const moodScatterRef = ref(null)
+const activityBoxplotRef = ref(null)
 let sleepChart = null
 let factorChart = null
+let moodScatterChart = null
+let activityBoxplotChart = null
 
 const filterTag = ref(null)
+
+const moodEmojiMap = {
+  happy: { label: '愉快', emoji: '😊', value: 6 },
+  calm: { label: '平静', emoji: '😌', value: 5 },
+  excited: { label: '兴奋', emoji: '🤩', value: 4 },
+  anxious: { label: '焦虑', emoji: '😰', value: 2 },
+  sad: { label: '低落', emoji: '😔', value: 1 },
+  angry: { label: '烦躁', emoji: '😤', value: 3 }
+}
+
+const activityLabelMap = {
+  phone: '刷手机',
+  reading: '看书',
+  exercise: '运动',
+  shower: '洗澡',
+  meditation: '冥想',
+  other: '其他'
+}
 
 const goals = reactive({
   targetBedtime: store.goals.targetBedtime,
@@ -170,6 +209,7 @@ const goals = reactive({
 })
 
 const last7 = computed(() => store.getLast7Days(filterTag.value))
+const last30 = computed(() => store.getLast30Days(filterTag.value))
 
 const avgScore = computed(() => {
   const days = last7.value
@@ -293,10 +333,163 @@ function renderFactorChart() {
   })
 }
 
+function renderMoodScatterChart() {
+  if (!moodScatterRef.value) return
+  if (!moodScatterChart) moodScatterChart = echarts.init(moodScatterRef.value)
+
+  const days = last30.value.filter(r => r.preSleepMood && moodEmojiMap[r.preSleepMood])
+  const scatterData = days.map(r => [
+    moodEmojiMap[r.preSleepMood].value,
+    store.calcSleepScore(r),
+    r.date
+  ])
+
+  const moodCategories = Object.entries(moodEmojiMap).map(([key, val]) => ({
+    value: val.value,
+    label: val.emoji + ' ' + val.label
+  })).sort((a, b) => a.value - b.value)
+
+  moodScatterChart.setOption({
+    tooltip: {
+      formatter: (params) => {
+        const data = params.data
+        const moodEntry = Object.entries(moodEmojiMap).find(([_, v]) => v.value === data[0])
+        const moodLabel = moodEntry ? moodEntry[1].emoji + ' ' + moodEntry[1].label : ''
+        return `日期：${data[2]}<br/>心情：${moodLabel}<br/>睡眠评分：${data[1]}`
+      }
+    },
+    grid: { left: 60, right: 30, bottom: 60, top: 30 },
+    xAxis: {
+      type: 'value',
+      min: 0,
+      max: 7,
+      name: '睡前心情',
+      nameTextStyle: { color: '#7f8c9b' },
+      axisLabel: {
+        color: '#7f8c9b',
+        formatter: (value) => {
+          const mood = moodCategories.find(m => m.value === value)
+          return mood ? mood.label : ''
+        },
+        interval: 1
+      },
+      splitLine: { lineStyle: { color: 'rgba(127,140,155,0.15)' } }
+    },
+    yAxis: {
+      type: 'value',
+      min: 0,
+      max: 100,
+      name: '睡眠评分',
+      nameTextStyle: { color: '#7f8c9b' },
+      axisLabel: { color: '#7f8c9b' },
+      splitLine: { lineStyle: { color: 'rgba(127,140,155,0.15)' } }
+    },
+    series: [{
+      type: 'scatter',
+      data: scatterData,
+      symbolSize: 16,
+      itemStyle: {
+        color: new echarts.graphic.RadialGradient(0.4, 0.3, 1, [
+          { offset: 0, color: 'rgba(126,184,216,0.8)' },
+          { offset: 1, color: 'rgba(126,184,216,0.4)' }
+        ]),
+        shadowBlur: 10,
+        shadowColor: 'rgba(126,184,216,0.3)'
+      },
+      emphasis: {
+        itemStyle: {
+          color: new echarts.graphic.RadialGradient(0.4, 0.3, 1, [
+            { offset: 0, color: 'rgba(103,194,138,0.9)' },
+            { offset: 1, color: 'rgba(103,194,138,0.5)' }
+          ])
+        }
+      }
+    }]
+  })
+}
+
+function renderActivityBoxplotChart() {
+  if (!activityBoxplotRef.value) return
+  if (!activityBoxplotChart) activityBoxplotChart = echarts.init(activityBoxplotRef.value)
+
+  const days = last30.value
+  const activityScoresMap = {}
+
+  days.forEach((r, idx) => {
+    if (r.preSleepActivities && r.preSleepActivities.length > 0) {
+      const nextDay = days[idx + 1]
+      const score = nextDay ? store.calcSleepScore(nextDay) : store.calcSleepScore(r)
+      r.preSleepActivities.forEach(activity => {
+        if (!activityScoresMap[activity]) {
+          activityScoresMap[activity] = []
+        }
+        activityScoresMap[activity].push(score)
+      })
+    }
+  })
+
+  const activityList = Object.keys(activityScoresMap).filter(a => activityScoresMap[a].length >= 2)
+  const boxData = activityList.map(activity => {
+    const scores = activityScoresMap[activity].sort((a, b) => a - b)
+    const n = scores.length
+    const q1 = scores[Math.floor(n * 0.25)]
+    const q2 = scores[Math.floor(n * 0.5)]
+    const q3 = scores[Math.floor(n * 0.75)]
+    const min = scores[0]
+    const max = scores[n - 1]
+    return [min, q1, q2, q3, max]
+  })
+
+  const xAxisData = activityList.map(a => activityLabelMap[a] || a)
+
+  activityBoxplotChart.setOption({
+    tooltip: {
+      trigger: 'item',
+      formatter: (params) => {
+        const data = params.data
+        return `${params.name}<br/>最小值：${data[0]}<br/>下四分位数：${data[1]}<br/>中位数：${data[2]}<br/>上四分位数：${data[3]}<br/>最大值：${data[4]}`
+      }
+    },
+    grid: { left: 60, right: 30, bottom: 50, top: 30 },
+    xAxis: {
+      type: 'category',
+      data: xAxisData,
+      axisLabel: { color: '#7f8c9b', rotate: 0 },
+      splitLine: { show: false }
+    },
+    yAxis: {
+      type: 'value',
+      min: 0,
+      max: 100,
+      name: '次日睡眠评分',
+      nameTextStyle: { color: '#7f8c9b' },
+      axisLabel: { color: '#7f8c9b' },
+      splitLine: { lineStyle: { color: 'rgba(127,140,155,0.15)' } }
+    },
+    series: [{
+      type: 'boxplot',
+      data: boxData,
+      itemStyle: {
+        color: 'rgba(126,184,216,0.7)',
+        borderColor: '#5a9ab8',
+        borderWidth: 2
+      },
+      emphasis: {
+        itemStyle: {
+          color: 'rgba(103,194,138,0.8)',
+          borderColor: '#67c28a'
+        }
+      }
+    }]
+  })
+}
+
 watch([filterTag, () => store.records], () => {
   nextTick(() => {
     renderSleepChart()
     renderFactorChart()
+    renderMoodScatterChart()
+    renderActivityBoxplotChart()
   })
 }, { deep: true })
 
@@ -304,10 +497,14 @@ onMounted(() => {
   nextTick(() => {
     renderSleepChart()
     renderFactorChart()
+    renderMoodScatterChart()
+    renderActivityBoxplotChart()
   })
   window.addEventListener('resize', () => {
     sleepChart?.resize()
     factorChart?.resize()
+    moodScatterChart?.resize()
+    activityBoxplotChart?.resize()
   })
 })
 </script>
@@ -501,6 +698,16 @@ onMounted(() => {
 
   .chart-box {
     height: 240px;
+  }
+}
+
+.mood-analysis-section {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+
+  .chart-box {
+    height: 260px;
   }
 }
 

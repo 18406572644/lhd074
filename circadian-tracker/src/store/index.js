@@ -43,7 +43,14 @@ export const useScheduleStore = defineStore('schedule', () => {
       caffeineMg: Number(record.caffeineMg) || 0,
       screenMin: Number(record.screenMin) || 0,
       note: record.note || '',
-      tags: Array.isArray(record.tags) ? record.tags : []
+      tags: Array.isArray(record.tags) ? record.tags : [],
+      preSleepMood: record.preSleepMood || null,
+      preSleepActivities: Array.isArray(record.preSleepActivities) ? record.preSleepActivities : [],
+      preSleepThoughts: Number(record.preSleepThoughts) || 0,
+      morningEnergy: Number(record.morningEnergy) || 0,
+      dreamStatus: record.dreamStatus || null,
+      dreamDescription: record.dreamDescription || '',
+      nightWakeUps: record.nightWakeUps || null
     }
     const existing = records.value.findIndex(r => r.date === normalized.date)
     if (existing >= 0) {
@@ -227,6 +234,10 @@ export const useSettingsStore = defineStore('settings', () => {
     dailyEntryReminder: {
       enabled: true,
       time: '22:30'
+    },
+    morningEntryReminder: {
+      enabled: false,
+      time: '07:30'
     },
     autoStart: true
   }

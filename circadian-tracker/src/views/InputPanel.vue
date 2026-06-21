@@ -137,6 +137,63 @@
           </el-form-item>
         </el-form>
       </div>
+
+      <div class="ct-card form-card pre-sleep-card">
+        <div class="ct-title collapsible" @click="preSleepCollapsed = !preSleepCollapsed">
+          <el-icon><Moon /></el-icon>
+          睡前状态
+          <el-icon class="collapse-icon" :class="{ collapsed: preSleepCollapsed }"><ArrowDown /></el-icon>
+        </div>
+        <el-collapse-transition>
+          <div v-show="!preSleepCollapsed">
+            <el-form :model="form" label-width="100px" label-position="left" size="large">
+              <el-form-item label="入睡前心情">
+                <div class="mood-selector">
+                  <div
+                    v-for="mood in moodOptions"
+                    :key="mood.value"
+                    class="mood-item"
+                    :class="{ active: form.preSleepMood === mood.value }"
+                    @click="form.preSleepMood = form.preSleepMood === mood.value ? null : mood.value"
+                  >
+                    <span class="mood-emoji">{{ mood.emoji }}</span>
+                    <span class="mood-label">{{ mood.label }}</span>
+                  </div>
+                </div>
+              </el-form-item>
+              <el-form-item label="睡前1小时活动">
+                <el-checkbox-group v-model="form.preSleepActivities">
+                  <div class="activity-checkboxes">
+                    <el-checkbox
+                      v-for="activity in preSleepActivities"
+                      :key="activity.value"
+                      :label="activity.value"
+                      border
+                    >
+                      {{ activity.label }}
+                    </el-checkbox>
+                  </div>
+                </el-checkbox-group>
+              </el-form-item>
+              <el-form-item label="思绪程度">
+                <div class="thoughts-slider">
+                  <span class="slider-label">脑子空空</span>
+                  <el-slider
+                    v-model="form.preSleepThoughts"
+                    :min="1"
+                    :max="5"
+                    :step="1"
+                    :marks="thoughtsMarks"
+                    show-tooltip
+                    style="flex: 1; margin: 0 16px"
+                  />
+                  <span class="slider-label">思绪万千</span>
+                </div>
+              </el-form-item>
+            </el-form>
+          </div>
+        </el-collapse-transition>
+      </div>
     </div>
 
     <div class="input-footer">
@@ -167,7 +224,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { RefreshLeft, Check, Plus } from '@element-plus/icons-vue'
+import { RefreshLeft, Check, Plus, Moon, ArrowDown } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import dayjs from 'dayjs'
 import { useScheduleStore } from '@/store'
@@ -184,10 +241,44 @@ const form = ref({
   caffeineMg: 0,
   screenMin: 0,
   note: '',
-  tags: []
+  tags: [],
+  preSleepMood: null,
+  preSleepActivities: [],
+  preSleepThoughts: 0,
+  morningEnergy: 0,
+  dreamStatus: null,
+  dreamDescription: '',
+  nightWakeUps: null
 })
 
 const newTagInput = ref('')
+const preSleepCollapsed = ref(false)
+
+const moodOptions = [
+  { value: 'happy', label: '愉快', emoji: '😊' },
+  { value: 'calm', label: '平静', emoji: '😌' },
+  { value: 'excited', label: '兴奋', emoji: '🤩' },
+  { value: 'anxious', label: '焦虑', emoji: '😰' },
+  { value: 'sad', label: '低落', emoji: '😔' },
+  { value: 'angry', label: '烦躁', emoji: '😤' }
+]
+
+const preSleepActivities = [
+  { value: 'phone', label: '刷手机' },
+  { value: 'reading', label: '看书' },
+  { value: 'exercise', label: '运动' },
+  { value: 'shower', label: '洗澡' },
+  { value: 'meditation', label: '冥想' },
+  { value: 'other', label: '其他' }
+]
+
+const thoughtsMarks = {
+  1: '1',
+  2: '2',
+  3: '3',
+  4: '4',
+  5: '5'
+}
 
 const previewScore = computed(() => {
   return store.calcSleepScore(form.value)
@@ -257,7 +348,14 @@ function resetForm() {
     caffeineMg: 0,
     screenMin: 0,
     note: '',
-    tags: []
+    tags: [],
+    preSleepMood: null,
+    preSleepActivities: [],
+    preSleepThoughts: 0,
+    morningEnergy: 0,
+    dreamStatus: null,
+    dreamDescription: '',
+    nightWakeUps: null
   }
 }
 
@@ -302,7 +400,18 @@ function checkAbnormal() {
 onMounted(() => {
   const today = store.todayRecord
   if (today) {
-    form.value = { ...form.value, ...today, tags: today.tags || [] }
+    form.value = {
+      ...form.value,
+      ...today,
+      tags: today.tags || [],
+      preSleepMood: today.preSleepMood || null,
+      preSleepActivities: today.preSleepActivities || [],
+      preSleepThoughts: today.preSleepThoughts || 0,
+      morningEnergy: today.morningEnergy || 0,
+      dreamStatus: today.dreamStatus || null,
+      dreamDescription: today.dreamDescription || '',
+      nightWakeUps: today.nightWakeUps || null
+    }
   }
 })
 </script>
@@ -460,5 +569,84 @@ onMounted(() => {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.pre-sleep-card {
+  .ct-title.collapsible {
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    .collapse-icon {
+      margin-left: auto;
+      transition: transform 0.3s ease;
+
+      &.collapsed {
+        transform: rotate(-90deg);
+      }
+    }
+  }
+
+  .mood-selector {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+
+    .mood-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      padding: 10px 14px;
+      border: 2px solid var(--ct-border);
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      background: var(--ct-surface);
+
+      &:hover {
+        border-color: var(--ct-primary-light);
+        transform: translateY(-2px);
+      }
+
+      &.active {
+        border-color: var(--ct-primary);
+        background: var(--ct-primary-lighter);
+        box-shadow: 0 2px 8px rgba(126, 184, 216, 0.3);
+      }
+
+      .mood-emoji {
+        font-size: 28px;
+      }
+
+      .mood-label {
+        font-size: 12px;
+        color: var(--ct-text-secondary);
+      }
+    }
+  }
+
+  .activity-checkboxes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .thoughts-slider {
+    display: flex;
+    align-items: center;
+    width: 100%;
+
+    .slider-label {
+      font-size: 12px;
+      color: var(--ct-text-secondary);
+      white-space: nowrap;
+    }
+  }
+}
+
+:deep(.el-collapse-transition) {
+  transition: all 0.3s ease;
 }
 </style>
