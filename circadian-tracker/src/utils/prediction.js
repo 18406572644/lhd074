@@ -274,6 +274,144 @@ export function shouldShowNoonReminder(records) {
   return true
 }
 
+function percentile(sorted, p) {
+  if (sorted.length === 0) return 0
+  const idx = (p / 100) * (sorted.length - 1)
+  const lo = Math.floor(idx)
+  const hi = Math.ceil(idx)
+  if (lo === hi) return sorted[lo]
+  return sorted[lo] + (sorted[hi] - sorted[lo]) * (idx - lo)
+}
+
+function calcSleepDuration(record) {
+  const bedtime = dayjs(`${record.date} ${record.bedtime}`)
+  const wakeTime = dayjs(`${record.date} ${record.wakeTime}`)
+  let hours = wakeTime.diff(bedtime, 'minute') / 60
+  if (hours < 0) hours += 24
+  return hours
+}
+
+export function calcSmartRecommendation(records) {
+  if (records.length < 7) {
+    return {
+      available: false,
+      reason: `数据不足（需至少7天，当前${records.length}天）`,
+      p50: null,
+      p75: null
+    }
+  }
+
+  const sorted = [...records].sort((a, b) => a.date.localeCompare(b.date))
+  const recent = sorted.slice(-30)
+
+  const bedtimeMinutes = recent.map(r => timeToMinutes(r.bedtime)).sort((a, b) => a - b)
+  const wakeTimeMinutes = recent.map(r => {
+    const [h, m] = r.wakeTime.split(':').map(Number)
+    return h * 60 + m
+  }).sort((a, b) => a - b)
+  const sleepDurations = recent.map(r => calcSleepDuration(r)).sort((a, b) => a - b)
+
+  const bedtimeP50 = percentile(bedtimeMinutes, 50)
+  const bedtimeP75 = percentile(bedtimeMinutes, 75)
+  const wakeP50 = percentile(wakeTimeMinutes, 50)
+  const wakeP75 = percentile(wakeTimeMinutes, 75)
+  const sleepP50 = percentile(sleepDurations, 50)
+  const sleepP75 = percentile(sleepDurations, 75)
+
+  const recommendedBedtime = minutesToTime(Math.round(bedtimeP50))
+  const ambitiousBedtime = minutesToTime(Math.round(bedtimeP75))
+  const recommendedWakeTime = minutesToTime(Math.round(wakeP50))
+  const recommendedSleepHours = Math.round(sleepP50 * 10) / 10
+  const ambitiousSleepHours = Math.round(sleepP75 * 10) / 10
+
+  return {
+    available: true,
+    reason: null,
+    p50: {
+      targetBedtime: recommendedBedtime,
+      targetWakeTime: recommendedWakeTime,
+      targetSleepHours: recommendedSleepHours
+    },
+    p75: {
+      targetBedtime: ambitiousBedtime,
+      targetWakeTime: minutesToTime(Math.round(wakeP75)),
+      targetSleepHours: ambitiousSleepHours
+    },
+    stats: {
+      sampleDays: recent.length,
+      bedtimeP50: minutesToTime(Math.round(bedtimeP50)),
+      bedtimeP75: minutesToTime(Math.round(bedtimeP75)),
+      sleepP50: recommendedSleepHours,
+      sleepP75: ambitiousSleepHours,
+      bedtimeStd: Math.round(Math.sqrt(bedtimeMinutes.reduce((s, v) => s + (v - bedtimeP50) ** 2, 0) / bedtimeMinutes.length)),
+      sleepStd: Math.round(Math.sqrt(sleepDurations.reduce((s, v) => s + (v - sleepP50) ** 2, 0) / sleepDurations.length) * 10) / 10
+    }
+  }
+}
+
+export function calcAchievementPredictionCurve(records, calcSleepScore, goals) {
+  if (records.length < 7) return null
+
+  const sorted = [...records].sort((a, b) => a.date.localeCompare(b.date))
+  const recent = sorted.slice(-30)
+
+  const dailyAchievement = recent.map(r => {
+    const bedtime = dayjs(`${r.date} ${r.bedtime}`)
+    const targetBedtime = dayjs(`${r.date} ${goals.targetBedtime}`)
+    const bedDiff = Math.abs(bedtime.diff(targetBedtime, 'minute'))
+
+    const wakeTime = dayjs(`${r.date} ${r.wakeTime}`)
+    const targetWake = dayjs(`${r.date} ${goals.targetWakeTime}`)
+    const wakeDiff = Math.abs(wakeTime.diff(targetWake, 'minute'))
+
+    let sleepH = wakeTime.diff(bedtime, 'minute') / 60
+    if (sleepH < 0) sleepH += 24
+    const sleepRatio = Math.min(1, sleepH / goals.targetSleepHours)
+
+    const deepRatio = r.deepSleep / (sleepH * 60 || 1)
+    const deepRatioAch = Math.min(1, deepRatio / goals.targetDeepRatio)
+
+    const bedAch = Math.max(0, 1 - bedDiff / 120)
+    const wakeAch = Math.max(0, 1 - wakeDiff / 120)
+
+    const totalAch = (bedAch * 0.3 + wakeAch * 0.2 + sleepRatio * 0.3 + deepRatioAch * 0.2) * 100
+    return {
+      date: r.date,
+      achievement: Math.round(totalAch),
+      score: calcSleepScore(r)
+    }
+  })
+
+  const points = dailyAchievement.map((d, i) => ({ x: i, y: d.achievement }))
+  const { slope, intercept } = linearRegression(points)
+
+  const futureDays = 7
+  const lastIdx = points.length - 1
+  const predictions = []
+  for (let d = 1; d <= futureDays; d++) {
+    const futureIdx = lastIdx + d
+    const predicted = slope * futureIdx + intercept
+    predictions.push({
+      dayOffset: d,
+      achievement: Math.round(Math.min(100, Math.max(0, predicted)))
+    })
+  }
+
+  const recent7 = dailyAchievement.slice(-7)
+  const avg7 = recent7.length > 0 ? Math.round(recent7.reduce((s, d) => s + d.achievement, 0) / recent7.length) : 0
+  const recent3 = dailyAchievement.slice(-3)
+  const avg3 = recent3.length > 0 ? Math.round(recent3.reduce((s, d) => s + d.achievement, 0) / recent3.length) : 0
+
+  return {
+    history: dailyAchievement,
+    predictions,
+    trendSlope: Math.round(slope * 100) / 100,
+    avg7,
+    avg3,
+    trendDirection: slope > 1 ? 'improving' : slope < -1 ? 'declining' : 'stable'
+  }
+}
+
 export function getNoonReminderText(records) {
   const sorted = [...records].sort((a, b) => a.date.localeCompare(b.date))
   const recent3 = sorted.slice(-3)

@@ -22,6 +22,13 @@
       @takeAction="handlePredictionAction"
     />
 
+    <SmartRecommendPanel
+      :records="last30Records"
+      :calcSleepScore="store.calcSleepScore"
+      :goals="store.goals"
+      @applied="handleSmartRecommendApplied"
+    />
+
     <div class="stats-row">
       <div class="ct-card stat-card" v-for="stat in todayStats" :key="stat.label">
         <div class="stat-icon" :style="{ background: stat.color }">
@@ -162,6 +169,7 @@ import * as echarts from 'echarts'
 import { useScheduleStore } from '@/store'
 import { useThemeStore } from '@/store'
 import PredictionCard from '@/components/PredictionCard.vue'
+import SmartRecommendPanel from '@/components/SmartRecommendPanel.vue'
 import { shouldShowNoonReminder, getNoonReminderText } from '@/utils/prediction'
 
 const store = useScheduleStore()
@@ -193,6 +201,10 @@ const last30Records = computed(() => store.getLast30Days())
 
 function handlePredictionAction() {
   router.push('/input')
+}
+
+function handleSmartRecommendApplied() {
+  renderAll()
 }
 
 const todayScoreType = computed(() => {
